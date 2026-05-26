@@ -16,7 +16,7 @@
       "author": {
         "name": "arcobaleno64"
       },
-      "source": "./gemini"
+      "source": "./plugins/gemini"
     }
   ]
 }

@@ -188,7 +188,7 @@ Claude Code
 
 ## 更新日誌
 
-詳見 [CHANGELOG.md](gemini/CHANGELOG.md)。
+詳見 [CHANGELOG.md](plugins/gemini/CHANGELOG.md)。
 
 ---
 

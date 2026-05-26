@@ -190,7 +190,7 @@ Three skills are bundled for Claude Code to consume:
 
 ## Changelog
 
-See [CHANGELOG.md](gemini/CHANGELOG.md).
+See [CHANGELOG.md](plugins/gemini/CHANGELOG.md).
 
 ---
 

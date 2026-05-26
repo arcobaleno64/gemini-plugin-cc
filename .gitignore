@@ -1,6 +1,7 @@
 # Runtime state — never commit
-gemini/.omc/
-gemini/scripts/lib/*.log
+.omc/
+plugins/gemini/.omc/
+plugins/gemini/scripts/lib/*.log
 
 # OS artifacts
 .DS_Store
