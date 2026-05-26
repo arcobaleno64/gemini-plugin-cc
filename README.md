@@ -2,6 +2,8 @@
 
 > Delegate tasks and adversarial code reviews to Google Gemini / AGY directly from Claude Code.
 
+[繁體中文說明 →](README.zh-TW.md)
+
 Mirrors the [openai-codex](https://github.com/openai/codex) skill architecture — same slash-command UX, same background job model, same skill contract — powered by the Gemini ecosystem instead of OpenAI.
 
 ---
