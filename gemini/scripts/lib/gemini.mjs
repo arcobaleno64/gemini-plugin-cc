@@ -121,7 +121,8 @@ export async function runGeminiReview(cwd, options = {}) {
     model,
     write: false,
     outputJson: useJson,
-    approvalModePlan: useJson,
+    // approvalModePlan requires TTY input and conflicts with stdin prompt delivery
+    approvalModePlan: false,
     useStdin,
   });
 
@@ -141,13 +142,16 @@ export async function runGeminiReview(cwd, options = {}) {
   let reviewText = rawStdout.trim();
 
   if (useJson) {
-    // Gemini --output-format json wraps response in a JSON structure
-    // Try to extract the text content from it, then parse inner JSON
+    // Gemini --output-format json wraps the response in an outer JSON envelope.
+    // The text payload lives at different paths depending on CLI version:
+    //   { response: "text..." }          — string (common with stdin delivery)
+    //   { response: { text: "..." } }    — nested object (older format)
+    //   { candidates[0].content... }     — raw API shape
     const outerParsed = tryParseJsonFromText(rawStdout);
     if (outerParsed) {
-      // Gemini CLI json output: may have { response: { text: "..." } } or similar
       const innerText =
         outerParsed?.response?.text ??
+        (typeof outerParsed?.response === "string" ? outerParsed.response : null) ??
         outerParsed?.candidates?.[0]?.content?.parts?.[0]?.text ??
         outerParsed?.text ??
         rawStdout;
