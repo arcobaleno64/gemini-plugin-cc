@@ -1,0 +1,21 @@
+{
+  "name": "local-gemini",
+  "owner": {
+    "name": "local"
+  },
+  "metadata": {
+    "description": "Local Gemini/AGY companion plugin for Claude Code — mirrors openai-codex plugin with AGY auto-detect",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "gemini",
+      "description": "Gemini/AGY companion plugin — delegation, adversarial review, rescue agent",
+      "version": "0.1.0",
+      "author": {
+        "name": "local"
+      },
+      "source": "./gemini"
+    }
+  ]
+}

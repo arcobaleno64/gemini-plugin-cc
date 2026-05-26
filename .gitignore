@@ -1,0 +1,11 @@
+# Runtime state — never commit
+gemini/.omc/
+gemini/scripts/lib/*.log
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
