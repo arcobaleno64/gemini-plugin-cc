@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0 — 2026-05-27
+
+### Added
+- `/gemini:review` — standard (non-adversarial) code review; finds real bugs, missing error handling, and incomplete paths.
+- `prompts/review.md` — pragmatic reviewer prompt template (same JSON output schema as adversarial-review).
+- Review Gate fully implemented: `stop-review-gate-hook.mjs` now runs `adversarial-review` before session end when any `--write` task completed; blocks with finding summary if verdict is `needs-attention`.
+- `/gemini:setup --enable-review-gate` / `--disable-review-gate` flags to toggle the gate without editing config JSON.
+- `setup` output now includes `review gate: enabled/disabled` status.
+
+### Fixed
+- `buildSetupReport` now reads `reviewGateEnabled` from config and passes it to `renderSetupReport` — previously always rendered as "disabled".
+- `commands/result.md` now mentions `/gemini:review --wait` in follow-up suggestions.
+
+### Documentation
+- README: `/gemini:rescue` flags table now includes `--fresh` (force new session).
+- README: `/gemini:result` section now explains the `Resume in Gemini: gemini resume <session-id>` output.
+- README: new Review Gate section with enable/disable instructions.
+
 ## 0.4.0 — 2026-05-27
 
 ### Added

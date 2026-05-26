@@ -68,7 +68,7 @@ function printUsage() {
   console.log(
     [
       "Usage:",
-      "  node scripts/gemini-companion.mjs setup [--json]",
+      "  node scripts/gemini-companion.mjs setup [--json] [--enable-review-gate|--disable-review-gate]",
       "  node scripts/gemini-companion.mjs adversarial-review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [--engine agy|gemini|auto] [focus text]",
       "  node scripts/gemini-companion.mjs review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [--engine agy|gemini|auto]",
       "  node scripts/gemini-companion.mjs task [--background] [--write] [--resume-last|--resume|--fresh] [--model <model>] [--effort <low|medium|high>] [--engine agy|gemini|auto] [prompt]",
@@ -152,6 +152,7 @@ function buildSetupReport(cwd, actionsTaken = []) {
   const agyStatus = getAgyAvailability();
   const geminiAuth = getGeminiLoginStatus(cwd);
   const agyAuth = getAgyLoginStatus();
+  const config = getConfig(workspaceRoot) ?? {};
 
   const nextSteps = [];
   if (!geminiStatus.available && !agyStatus.available) {
@@ -170,6 +171,7 @@ function buildSetupReport(cwd, actionsTaken = []) {
     agy: agyStatus,
     agyAuth,
     sessionRuntime: getSessionRuntimeStatus(),
+    reviewGateEnabled: config.stopReviewGateEnabled ?? false,
     actionsTaken,
     nextSteps
   };
@@ -178,11 +180,22 @@ function buildSetupReport(cwd, actionsTaken = []) {
 function handleSetup(argv) {
   const { options } = parseCommandInput(argv, {
     valueOptions: ["cwd"],
-    booleanOptions: ["json"]
+    booleanOptions: ["json", "enable-review-gate", "disable-review-gate"]
   });
 
   const cwd = resolveCommandCwd(options);
-  const finalReport = buildSetupReport(cwd, []);
+  const workspaceRoot = resolveCommandWorkspace(options);
+  const actionsTaken = [];
+
+  if (options["enable-review-gate"]) {
+    setConfig(workspaceRoot, "stopReviewGateEnabled", true);
+    actionsTaken.push("Review gate enabled.");
+  } else if (options["disable-review-gate"]) {
+    setConfig(workspaceRoot, "stopReviewGateEnabled", false);
+    actionsTaken.push("Review gate disabled.");
+  }
+
+  const finalReport = buildSetupReport(cwd, actionsTaken);
   outputResult(options.json ? finalReport : renderSetupReport(finalReport), options.json);
 }
 

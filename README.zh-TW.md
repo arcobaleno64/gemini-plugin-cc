@@ -85,6 +85,7 @@
 | `--background` | 分離執行；立即回傳工作 ID |
 | `--write` | 允許 Gemini 修改檔案（`--yolo` / `--dangerously-skip-permissions`） |
 | `--resume-last` | 繼續最近一次的 Gemini 工作階段 |
+| `--fresh` | 強制開啟全新 Gemini 工作階段，忽略可接續的執行緒 |
 | `--engine <gemini\|agy\|auto>` | 覆蓋引擎選擇 |
 | `--model <別名\|ID>` | 指定模型（`flash`、`pro`、`lite`） |
 | `--effort <low\|medium\|high\|xhigh>` | 以努力等級對應模型選擇 |
@@ -115,11 +116,29 @@
 
 ### `/gemini:result [工作-ID]`
 
-取得已完成工作的輸出內容。
+取得已完成工作的輸出內容。若工作帶有 Gemini session ID，輸出中會包含 `Resume in Gemini: gemini resume <session-id>`——將該命令貼到終端機即可直接在 Gemini CLI 中接續工作階段。
 
 ### `/gemini:cancel [工作-ID]`
 
 取消執行中或佇列中的背景工作。
+
+---
+
+## Review Gate（可選）
+
+可選的停止時審查閘門，當本次 session 有 `--write` 工作完成時，在 Claude Code 停止前自動執行對抗性審查。預設停用。
+
+透過 `/gemini:setup` 啟用或停用：
+
+```
+# 啟用
+/gemini:setup --enable-review-gate
+
+# 停用
+/gemini:setup --disable-review-gate
+```
+
+啟用後，若審查回傳 `needs-attention`，Claude Code 將被阻止停止並顯示發現摘要。執行 `/gemini:adversarial-review --wait` 查看完整發現，決定是否接受或修正後再繼續。
 
 ---
 

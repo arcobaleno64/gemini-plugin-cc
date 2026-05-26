@@ -87,6 +87,7 @@ Delegates a task to Gemini. Reads from stdin if no prompt is given.
 | `--background` | Run detached; returns a job ID immediately |
 | `--write` | Allow Gemini to modify files (`--yolo` / `--dangerously-skip-permissions`) |
 | `--resume-last` | Continue the most recent Gemini session |
+| `--fresh` | Force a new Gemini session, ignoring any resumable thread |
 | `--engine <gemini\|agy\|auto>` | Override engine selection |
 | `--model <alias\|id>` | Model override (`flash`, `pro`, `lite`) |
 | `--effort <low\|medium\|high\|xhigh>` | Map effort level to a model |
@@ -117,11 +118,29 @@ Lists active and recent background jobs. Pass a job ID to inspect a single job.
 
 ### `/gemini:result [job-id]`
 
-Retrieves the output of a completed job.
+Retrieves the output of a completed job. If the job has a Gemini session ID, the output includes `Resume in Gemini: gemini resume <session-id>` — paste that into a terminal to continue the session in Gemini CLI directly.
 
 ### `/gemini:cancel [job-id]`
 
 Cancels a running or queued background job.
+
+---
+
+## Review Gate (Optional)
+
+An optional stop-time gate that runs an adversarial review before Claude Code can stop, whenever a `--write` task completed in the session. Disabled by default.
+
+Enable or disable via `/gemini:setup`:
+
+```
+# Enable
+/gemini:setup --enable-review-gate
+
+# Disable
+/gemini:setup --disable-review-gate
+```
+
+When enabled and the review returns `needs-attention`, Claude Code is blocked from stopping and shown the finding summary. Run `/gemini:adversarial-review --wait` to review the findings and decide whether to accept or fix them before continuing.
 
 ---
 
