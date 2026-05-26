@@ -310,7 +310,7 @@ async function executeTaskRun(request) {
   );
   const payload = {
     status: result.status,
-    threadId: null,
+    threadId: result.threadId ?? null,
     rawOutput,
     touchedFiles: result.touchedFiles,
     reasoningSummary: result.reasoningSummary
@@ -318,7 +318,7 @@ async function executeTaskRun(request) {
 
   return {
     exitStatus: result.status,
-    threadId: null,
+    threadId: result.threadId ?? null,
     turnId: null,
     payload,
     rendered,
@@ -662,6 +662,15 @@ async function handleTaskResumeCandidate(argv) {
   const cwd = resolveCommandCwd(options);
   const workspaceRoot = resolveCommandWorkspace(options);
   const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
+  const activeTask = jobs.find((job) => job.jobClass === "task" && (job.status === "queued" || job.status === "running"));
+  if (activeTask) {
+    const payload = { found: false, blocked: true, activeJobId: activeTask.id };
+    outputResult(
+      options.json ? payload : `Task ${activeTask.id} is still running. Use /gemini:status before resuming.\n`,
+      options.json
+    );
+    return;
+  }
   const candidate = jobs.find((job) => job.jobClass === "task" && job.status === "completed" && job.threadId);
   const payload = candidate
     ? { found: true, jobId: candidate.id, threadId: candidate.threadId, title: candidate.title }

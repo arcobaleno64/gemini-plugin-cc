@@ -36,19 +36,23 @@ Mirrors the [openai-codex](https://github.com/openai/codex) skill architecture â
 
 ## Installation
 
-```bash
-# Via Claude Code plugin registry
-/plugin install local-gemini
+```
+# 1. Add the marketplace
+/plugin marketplace add arcobaleno64/gemini-plugin-cc
 
-# Or clone and register locally
-git clone https://github.com/<your-user>/gemini-claude-plugin
-# Add the plugin path in Claude Code settings
+# 2. Install the plugin
+/plugin install arcobaleno64/gemini-plugin-cc
+
+# 3. Reload plugins
+/plugins reload
 ```
 
-Verify the installation:
+Then run `/gemini:setup` â€” it will check whether Gemini CLI is ready. If Gemini is missing and npm is available, it will offer to install it for you.
+
+If Gemini is installed but not authenticated yet, run:
 
 ```
-/gemini:setup
+!gemini
 ```
 
 ---
@@ -84,7 +88,7 @@ Delegates a task to Gemini. Reads from stdin if no prompt is given.
 | `--write` | Allow Gemini to modify files (`--yolo` / `--dangerously-skip-permissions`) |
 | `--resume-last` | Continue the most recent Gemini session |
 | `--engine <gemini\|agy\|auto>` | Override engine selection |
-| `--model <alias\|id>` | Model override (`flash`, `pro`, `lite`, `preview`) |
+| `--model <alias\|id>` | Model override (`flash`, `pro`, `lite`) |
 | `--effort <low\|medium\|high\|xhigh>` | Map effort level to a model |
 
 ### `/gemini:adversarial-review [focus]`
@@ -123,12 +127,14 @@ Cancels a running or queued background job.
 
 ## Model Aliases
 
-| Alias | Resolved Model |
-|---|---|
-| `flash` | `gemini-2.5-flash` |
-| `pro` | `gemini-2.5-pro` |
-| `lite` / `fast` | `gemini-2.5-flash-lite` |
-| `preview` | `gemini-3-pro-preview` |
+| Alias | Resolved Model | Notes |
+|---|---|---|
+| `flash` / `flash3` | `gemini-3.5-flash` | Latest stable Flash (GA) |
+| `pro` / `pro3` | `gemini-3.1-pro` | Gemini 3.1 Pro |
+| `flash25` | `gemini-2.5-flash` | Stable 2.5 Flash |
+| `pro25` | `gemini-2.5-pro` | Stable 2.5 Pro |
+| `lite` / `fast` | `gemini-2.5-flash-lite` | Cost-efficient |
+| `lite3` | `gemini-3.1-flash-lite` | Gemini 3.1 cost-efficient |
 
 ---
 

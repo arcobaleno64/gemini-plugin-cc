@@ -5,11 +5,18 @@ import { binaryAvailable } from "./process.mjs";
 export const ENGINE_ENV = "GEMINI_ENGINE";
 
 export const MODEL_ALIASES = new Map([
-  ["flash", "gemini-2.5-flash"],
-  ["pro", "gemini-2.5-pro"],
+  // Gemini 3.x — current generation (May 2026)
+  ["flash", "gemini-3.5-flash"],    // latest stable Flash (GA)
+  ["flash3", "gemini-3.5-flash"],
+  ["pro", "gemini-3.1-pro"],        // Gemini 3.1 Pro (renamed from -preview)
+  ["pro3", "gemini-3.1-pro"],
+  // Gemini 2.5 — stable GA aliases for backward compatibility
+  ["flash25", "gemini-2.5-flash"],
+  ["pro25", "gemini-2.5-pro"],
+  // Cost-efficient options
   ["lite", "gemini-2.5-flash-lite"],
-  ["preview", "gemini-3-pro-preview"],
   ["fast", "gemini-2.5-flash-lite"],
+  ["lite3", "gemini-3.1-flash-lite"],
 ]);
 
 export const VALID_EFFORT_LEVELS = new Set(["none", "minimal", "low", "medium", "high", "xhigh"]);
@@ -18,8 +25,8 @@ export function mapEffortToModel(effort) {
   if (!effort) return null;
   const e = String(effort).trim().toLowerCase();
   if (e === "none" || e === "minimal") return "gemini-2.5-flash-lite";
-  if (e === "low" || e === "medium") return "gemini-2.5-flash";
-  if (e === "high" || e === "xhigh") return "gemini-2.5-pro";
+  if (e === "low" || e === "medium") return "gemini-3.5-flash";
+  if (e === "high" || e === "xhigh") return "gemini-3.1-pro";
   return null;
 }
 
@@ -35,27 +42,31 @@ export function detectEngine(requestedEngine = null) {
   const target = requestedEngine ?? envEngine ?? "auto";
   const normalized = String(target).trim().toLowerCase();
 
+  if (normalized !== "auto" && normalized !== "gemini" && normalized !== "agy") {
+    throw new Error(`Unknown engine "${target}". Valid values: auto, gemini, agy.`);
+  }
+
   if (normalized === "agy") {
     const status = binaryAvailable("agy", ["--version"]);
     if (!status.available) throw new Error("AGY engine requested but agy binary is not available.");
-    return { engine: "agy", binary: "agy", version: status.version ?? "unknown" };
+    return { engine: "agy", binary: "agy", version: status.detail ?? "unknown" };
   }
 
   if (normalized === "gemini") {
     const status = binaryAvailable("gemini", ["--version"]);
     if (!status.available) throw new Error("Gemini engine requested but gemini binary is not available.");
-    return { engine: "gemini", binary: "gemini", version: status.version ?? "unknown" };
+    return { engine: "gemini", binary: "gemini", version: status.detail ?? "unknown" };
   }
 
   // auto: prefer gemini — AGY cannot output via pipe in non-interactive mode
   const geminiStatus = binaryAvailable("gemini", ["--version"]);
   if (geminiStatus.available) {
-    return { engine: "gemini", binary: "gemini", version: geminiStatus.version ?? "unknown" };
+    return { engine: "gemini", binary: "gemini", version: geminiStatus.detail ?? "unknown" };
   }
 
   const agyStatus = binaryAvailable("agy", ["--version"]);
   if (agyStatus.available) {
-    return { engine: "agy", binary: "agy", version: agyStatus.version ?? "unknown" };
+    return { engine: "agy", binary: "agy", version: agyStatus.detail ?? "unknown" };
   }
 
   throw new Error("No Gemini or AGY engine found. Install agy or gemini CLI and retry.");

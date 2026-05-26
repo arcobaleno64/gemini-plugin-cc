@@ -34,19 +34,23 @@
 
 ## 安裝
 
-```bash
-# 透過 Claude Code 外掛登錄
-/plugin install local-gemini
+```
+# 1. 加入 marketplace
+/plugin marketplace add arcobaleno64/gemini-plugin-cc
 
-# 或本機克隆後手動註冊
-git clone https://github.com/<your-user>/gemini-claude-plugin
-# 在 Claude Code 設定中加入外掛路徑
+# 2. 安裝外掛
+/plugin install arcobaleno64/gemini-plugin-cc
+
+# 3. 重新載入外掛
+/plugins reload
 ```
 
-驗證安裝：
+接著執行 `/gemini:setup`——若 Gemini CLI 尚未安裝且 npm 可用，指令會提供自動安裝選項。
+
+若 Gemini 已安裝但尚未完成認證，請執行：
 
 ```
-/gemini:setup
+!gemini
 ```
 
 ---
@@ -82,7 +86,7 @@ git clone https://github.com/<your-user>/gemini-claude-plugin
 | `--write` | 允許 Gemini 修改檔案（`--yolo` / `--dangerously-skip-permissions`） |
 | `--resume-last` | 繼續最近一次的 Gemini 工作階段 |
 | `--engine <gemini\|agy\|auto>` | 覆蓋引擎選擇 |
-| `--model <別名\|ID>` | 指定模型（`flash`、`pro`、`lite`、`preview`） |
+| `--model <別名\|ID>` | 指定模型（`flash`、`pro`、`lite`） |
 | `--effort <low\|medium\|high\|xhigh>` | 以努力等級對應模型選擇 |
 
 ### `/gemini:adversarial-review [焦點]`
@@ -121,12 +125,14 @@ git clone https://github.com/<your-user>/gemini-claude-plugin
 
 ## 模型別名
 
-| 別名 | 對應模型 |
-|---|---|
-| `flash` | `gemini-2.5-flash` |
-| `pro` | `gemini-2.5-pro` |
-| `lite` / `fast` | `gemini-2.5-flash-lite` |
-| `preview` | `gemini-3-pro-preview` |
+| 別名 | 對應模型 | 說明 |
+|---|---|---|
+| `flash` / `flash3` | `gemini-3.5-flash` | 最新穩定 Flash（GA） |
+| `pro` / `pro3` | `gemini-3.1-pro` | Gemini 3.1 Pro |
+| `flash25` | `gemini-2.5-flash` | 穩定 2.5 Flash |
+| `pro25` | `gemini-2.5-pro` | 穩定 2.5 Pro |
+| `lite` / `fast` | `gemini-2.5-flash-lite` | 高效低成本 |
+| `lite3` | `gemini-3.1-flash-lite` | Gemini 3.1 低成本版 |
 
 ---
 

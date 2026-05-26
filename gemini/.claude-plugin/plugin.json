@@ -1,8 +1,11 @@
 {
   "name": "gemini",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "Use Gemini/AGY from Claude Code to review code or delegate tasks.",
   "author": {
-    "name": "local"
-  }
+    "name": "arcobaleno64",
+    "url": "https://github.com/arcobaleno64"
+  },
+  "homepage": "https://github.com/arcobaleno64/gemini-plugin-cc",
+  "repository": "https://github.com/arcobaleno64/gemini-plugin-cc"
 }

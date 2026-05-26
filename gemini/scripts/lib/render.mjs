@@ -25,7 +25,7 @@ function validateReviewResultShape(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return "Expected a top-level JSON object.";
   }
-  const verdictValue = data.verdict ?? data.outcome;
+  const verdictValue = data.verdict || data.outcome;
   if (typeof verdictValue !== "string" || !verdictValue.trim()) {
     return "Missing string `verdict` (or `outcome`).";
   }
@@ -60,7 +60,7 @@ function normalizeReviewFinding(finding, index) {
 
 function normalizeReviewResultData(data) {
   return {
-    verdict: (data.verdict ?? data.outcome ?? "").trim(),
+    verdict: (data.verdict || data.outcome || "").trim(),
     summary: data.summary.trim(),
     findings: data.findings.map((finding, index) => normalizeReviewFinding(finding, index)),
     next_steps: (Array.isArray(data.next_steps) ? data.next_steps : [])
@@ -163,12 +163,14 @@ function pushJobDetails(lines, job, options = {}) {
 }
 
 function appendReasoningSection(lines, reasoningSummary) {
-  if (!Array.isArray(reasoningSummary) || reasoningSummary.length === 0) {
-    return;
-  }
+  // Accept both string (from gemini.mjs) and array
+  const sections = typeof reasoningSummary === "string" && reasoningSummary.trim()
+    ? [reasoningSummary.trim()]
+    : Array.isArray(reasoningSummary) ? reasoningSummary : [];
+  if (sections.length === 0) return;
 
   lines.push("", "Reasoning:");
-  for (const section of reasoningSummary) {
+  for (const section of sections) {
     lines.push(`- ${section}`);
   }
 }
@@ -183,7 +185,9 @@ export function renderSetupReport(report) {
     `- node: ${report.node.detail}`,
     `- npm: ${report.npm.detail}`,
     `- gemini: ${report.gemini.detail}`,
-    `- auth: ${report.auth.detail}`,
+    `- gemini auth: ${report.geminiAuth.detail}`,
+    `- agy: ${report.agy.detail}`,
+    `- agy auth: ${report.agyAuth.detail}`,
     `- session runtime: ${report.sessionRuntime.label}`,
     `- review gate: ${report.reviewGateEnabled ? "enabled" : "disabled"}`,
     ""

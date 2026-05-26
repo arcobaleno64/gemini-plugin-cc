@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.4.0 — 2026-05-27
+
+### Added
+- Gemini 3.x model aliases: `flash`/`flash3` → `gemini-3.5-flash` (GA), `pro`/`pro3` → `gemini-3.1-pro`, `lite3` → `gemini-3.1-flash-lite`.
+- Backward-compat aliases `flash25` → `gemini-2.5-flash`, `pro25` → `gemini-2.5-pro`.
+- `effort` mapping updated: `low`/`medium` → `gemini-3.5-flash`, `high`/`xhigh` → `gemini-3.1-pro`.
+- `task-resume-candidate` now guards against active/queued tasks (mirrors `resolveLatestTrackedTaskThread` guard).
+
+### Fixed
+- `renderSetupReport` was reading `report.auth.detail` (field does not exist); corrected to `report.geminiAuth.detail` and `report.agyAuth.detail`.
+- `verdict ?? outcome` alias in `validateReviewResultShape` / `normalizeReviewResultData` now uses `||` — `??` failed to fall through when `verdict` was an empty string.
+- `detectEngine` was reading `status.version` (field does not exist on `binaryAvailable` return); corrected to `status.detail`.
+- `detectEngine` now throws on unknown engine values instead of silently falling back to auto.
+- Removed `preview` alias that mapped to the non-existent `gemini-3-pro-preview`.
+
+## 0.3.0 — 2026-05-27
+
+### Added
+- Marketplace installation support: `/plugin marketplace add arcobaleno64/gemini-plugin-cc`
+- Session ID (`threadId`) extraction from Gemini CLI JSON envelope in task runs — enables `--resume-last` to work correctly.
+- `GEMINI_HOME` environment variable support for non-standard credential paths.
+
+### Fixed
+- `appendReasoningSection` now accepts both `string` (from `gemini.mjs`) and `Array` — reasoning output was silently dropped before this fix.
+- `runCommand` null `status` now resolves to `1` when the process was killed by a signal or failed to spawn, instead of masking failures as exit `0`.
+- `marketplace.json` and `plugin.json` updated with correct owner (`arcobaleno64`), repository URL, and version `0.3.0`.
+- README installation section updated with proper marketplace workflow.
+
 ## 0.2.0 — 2026-05-27
 
 ### Fixed

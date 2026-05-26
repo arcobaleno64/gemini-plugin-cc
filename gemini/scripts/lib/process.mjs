@@ -17,7 +17,8 @@ export function runCommand(command, args = [], options = {}) {
   return {
     command,
     args,
-    status: result.status ?? 0,
+    // null status means killed by signal or failed to spawn — treat as failure
+    status: result.status ?? (result.signal ? 1 : (result.error ? 1 : 0)),
     signal: result.signal ?? null,
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",

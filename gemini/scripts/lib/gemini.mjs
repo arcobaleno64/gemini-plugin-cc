@@ -60,6 +60,7 @@ export async function runGeminiTurn(cwd, options = {}) {
 
   // Gemini CLI reads from stdin to avoid shell injection on Windows (shell:true + args array)
   const useStdin = engineInfo.engine === "gemini";
+  const useJson = engineInfo.engine === "gemini";
   const args = buildCliArgs(engineInfo.engine, {
     prompt,
     model,
@@ -67,6 +68,7 @@ export async function runGeminiTurn(cwd, options = {}) {
     resumeLast,
     timeoutMs: DEFAULT_SPAWN_TIMEOUT_MS,
     useStdin,
+    outputJson: useJson,
   });
 
   onProgress?.({ message: `Starting ${engineInfo.engine} turn...`, phase: "running" });
@@ -81,7 +83,19 @@ export async function runGeminiTurn(cwd, options = {}) {
   const rawStdout = stripAnsi(result.stdout ?? "");
   const rawStderr = stripAnsi(result.stderr ?? "");
   const exitCode = result.status ?? (result.error ? 1 : 0);
-  const finalMessage = rawStdout.trim();
+
+  // For gemini engine with JSON output, extract response text and session_id
+  let finalMessage = rawStdout.trim();
+  let threadId = null;
+  if (useJson) {
+    const outer = tryParseJsonFromText(rawStdout);
+    if (outer) {
+      threadId = typeof outer.session_id === "string" ? outer.session_id : null;
+      const responseText = (typeof outer.response === "string" ? outer.response : outer?.response?.text) ?? rawStdout;
+      finalMessage = responseText.trim();
+    }
+  }
+
   const reasoningSummary = extractReasoningSummary(rawStderr) ?? null;
   const touchedFiles = extractTouchedFiles(finalMessage);
 
@@ -90,6 +104,7 @@ export async function runGeminiTurn(cwd, options = {}) {
   return {
     status: exitCode,
     finalMessage,
+    threadId,
     reasoningSummary,
     touchedFiles,
     engine: engineInfo.engine,
@@ -185,7 +200,8 @@ export function getAgyAvailability() {
 }
 
 export function getGeminiLoginStatus() {
-  const credFile = path.join(os.homedir(), ".gemini", "oauth_creds.json");
+  const geminiHome = process.env.GEMINI_HOME ?? path.join(os.homedir(), ".gemini");
+  const credFile = path.join(geminiHome, "oauth_creds.json");
   if (!fs.existsSync(credFile)) {
     return { loggedIn: false, detail: `No credentials at ${credFile}. Run \`gemini\` to authenticate.` };
   }
