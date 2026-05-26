@@ -70,6 +70,7 @@ function printUsage() {
       "Usage:",
       "  node scripts/gemini-companion.mjs setup [--json]",
       "  node scripts/gemini-companion.mjs adversarial-review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [--engine agy|gemini|auto] [focus text]",
+      "  node scripts/gemini-companion.mjs review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [--engine agy|gemini|auto]",
       "  node scripts/gemini-companion.mjs task [--background] [--write] [--resume-last|--resume|--fresh] [--model <model>] [--effort <low|medium|high>] [--engine agy|gemini|auto] [prompt]",
       "  node scripts/gemini-companion.mjs status [job-id] [--all] [--json]",
       "  node scripts/gemini-companion.mjs result [job-id] [--json]",
@@ -185,15 +186,6 @@ function handleSetup(argv) {
   outputResult(options.json ? finalReport : renderSetupReport(finalReport), options.json);
 }
 
-function buildAdversarialReviewPrompt(context, focusText) {
-  const template = loadPromptTemplate(ROOT_DIR, "adversarial-review");
-  return interpolateTemplate(template, {
-    TARGET_LABEL: context.target.label,
-    USER_FOCUS: focusText || "No extra focus provided.",
-    REVIEW_INPUT: context.content
-  });
-}
-
 function renderStatusPayload(report, asJson) {
   return asJson ? report : renderStatusReport(report);
 }
@@ -237,8 +229,15 @@ async function resolveLatestTrackedTaskThread(cwd, options = {}) {
 }
 
 async function executeReviewRun(request) {
+  const reviewName = request.reviewName ?? "Adversarial Review";
+  const templateName = request.templateName ?? "adversarial-review";
   const context = collectReviewContext(request.cwd, resolveReviewTarget(request.cwd, {}));
-  const prompt = buildAdversarialReviewPrompt(context, request.focusText ?? "");
+  const template = loadPromptTemplate(ROOT_DIR, templateName);
+  const prompt = interpolateTemplate(template, {
+    TARGET_LABEL: context.target.label,
+    USER_FOCUS: request.focusText || "No extra focus provided.",
+    REVIEW_INPUT: context.content
+  });
   const result = await runGeminiReview(request.cwd, {
     prompt,
     model: request.model,
@@ -251,7 +250,7 @@ async function executeReviewRun(request) {
     : { parsed: null, rawOutput: result.reviewText, parseError: "Could not parse structured JSON from review output." };
 
   const payload = {
-    review: "Adversarial Review",
+    review: reviewName,
     target: context.target,
     codex: { status: result.status, stdout: result.reviewText },
     result: parsed.parsed
@@ -263,12 +262,12 @@ async function executeReviewRun(request) {
     turnId: null,
     payload,
     rendered: renderReviewResult(parsed, {
-      reviewLabel: "Adversarial Review",
+      reviewLabel: reviewName,
       targetLabel: context.target?.label ?? "",
       reasoningSummary: result.reasoningSummary
     }),
     summary: parsed.parsed?.summary ?? parsed.parseError ?? "Review completed.",
-    jobTitle: "Gemini Adversarial Review",
+    jobTitle: `Gemini ${reviewName}`,
     jobClass: "review",
     targetLabel: context.target?.label ?? ""
   };
@@ -468,7 +467,7 @@ function enqueueBackgroundTask(cwd, job, request) {
   };
 }
 
-async function handleAdversarialReview(argv) {
+async function handleReviewCommand(argv, { reviewName, templateName, supportsFocus }) {
   const { options, positionals } = parseCommandInput(argv, {
     valueOptions: ["base", "scope", "model", "engine", "cwd"],
     booleanOptions: ["json", "wait", "background"],
@@ -477,21 +476,18 @@ async function handleAdversarialReview(argv) {
 
   const cwd = resolveCommandCwd(options);
   const workspaceRoot = resolveCommandWorkspace(options);
-  const focusText = positionals.join(" ").trim();
+  const focusText = supportsFocus ? positionals.join(" ").trim() : "";
 
   ensureGitRepository(cwd);
   const target = resolveReviewTarget(cwd, { base: options.base, scope: options.scope });
-  const metadata = {
-    title: "Gemini Adversarial Review",
-    summary: `Adversarial Review ${target.label}`
-  };
+  const kind = templateName === "adversarial-review" ? "adversarial-review" : "review";
   const job = createCompanionJob({
     prefix: "review",
-    kind: "adversarial-review",
-    title: metadata.title,
+    kind,
+    title: `Gemini ${reviewName}`,
     workspaceRoot,
     jobClass: "review",
-    summary: metadata.summary
+    summary: `${reviewName} ${target.label}`
   });
 
   await runForegroundCommand(
@@ -502,10 +498,20 @@ async function handleAdversarialReview(argv) {
         model: options.model,
         engine: options.engine,
         focusText,
+        reviewName,
+        templateName,
         onProgress: progress
       }),
     { json: options.json }
   );
+}
+
+async function handleReview(argv) {
+  return handleReviewCommand(argv, { reviewName: "Review", templateName: "review", supportsFocus: false });
+}
+
+async function handleAdversarialReview(argv) {
+  return handleReviewCommand(argv, { reviewName: "Adversarial Review", templateName: "adversarial-review", supportsFocus: true });
 }
 
 async function handleTask(argv) {
@@ -738,6 +744,9 @@ async function main() {
   switch (subcommand) {
     case "setup":
       handleSetup(argv);
+      break;
+    case "review":
+      await handleReview(argv);
       break;
     case "adversarial-review":
       await handleAdversarialReview(argv);

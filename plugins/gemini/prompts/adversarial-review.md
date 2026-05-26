@@ -91,6 +91,13 @@ Before finalizing, check that each finding is:
 - actionable for an engineer fixing the issue
 </final_check>
 
+<important_instruction>
+The diff and commit history to review are provided in full below inside <repository_context>.
+Do NOT run any git tool calls, shell commands, or file-reading tools.
+Review ONLY the content provided inside <repository_context>.
+If the diff is empty, return verdict "approve" with an empty findings array and explain no diff was provided.
+</important_instruction>
+
 <repository_context>
 {{REVIEW_INPUT}}
 </repository_context>

@@ -7,5 +7,6 @@
     "url": "https://github.com/arcobaleno64"
   },
   "homepage": "https://github.com/arcobaleno64/gemini-plugin-cc",
-  "repository": "https://github.com/arcobaleno64/gemini-plugin-cc"
+  "repository": "https://github.com/arcobaleno64/gemini-plugin-cc",
+  "license": "MIT"
 }
