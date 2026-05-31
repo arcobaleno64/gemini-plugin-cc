@@ -28,13 +28,51 @@ function extractReasoningSummary(stderr) {
   return lines.slice(-5).join("\n");
 }
 
-function tryParseJsonFromText(text) {
-  // Try direct parse
-  try { return JSON.parse(text.trim()); } catch {}
-  // Try finding last {...} block
-  const match = text.match(/\{[\s\S]*\}(?=[^}]*$)/);
-  if (match) {
-    try { return JSON.parse(match[0]); } catch {}
+function stripControlChars(str) {
+  // Strip C0 control chars (keep tab/newline/CR). Some gemini CLI builds emit
+  // control tokens / thought markers around the JSON that break JSON.parse.
+  return String(str ?? "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+}
+
+function extractBalancedJsonObjects(text) {
+  const objects = [];
+  let depth = 0;
+  let start = -1;
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}" && depth > 0) {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        objects.push(text.slice(start, i + 1));
+        start = -1;
+      }
+    }
+  }
+  return objects;
+}
+
+export function tryParseJsonFromText(text) {
+  const cleaned = stripControlChars(text);
+  // 1. Direct parse of the whole payload.
+  try { return JSON.parse(cleaned.trim()); } catch {}
+  // 2. Some CLI versions prepend a non-JSON preamble (e.g. `update_topic{...}`)
+  //    before the real object. Scan for balanced top-level {...} blocks and
+  //    return the LAST one that parses.
+  const candidates = extractBalancedJsonObjects(cleaned);
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    try { return JSON.parse(candidates[i]); } catch {}
   }
   return null;
 }
@@ -47,16 +85,19 @@ export async function runGeminiTurn(cwd, options = {}) {
 
   const engineInfo = detectEngine(requestedEngine ?? null);
 
-  if (engineInfo.engine === "agy" && model) {
-    process.stderr.write(`[gemini-companion] Warning: --model is not supported by AGY engine; ignoring.\n`);
+  if (engineInfo.engine === "agy") {
+    // AGY selects its model and effort tier interactively; its non-interactive
+    // CLI exposes no --model/effort flag, so both are ignored here.
+    if (model || effort) {
+      process.stderr.write(`[gemini-companion] Note: AGY chooses its model and effort interactively; ignoring --model/--effort for the AGY engine.\n`);
+    }
     model = null;
+  } else {
+    if (!model && effort) {
+      model = mapEffortToModel(effort);
+    }
+    model = normalizeRequestedModel(model) ?? model;
   }
-
-  if (!model && effort) {
-    model = mapEffortToModel(effort);
-  }
-
-  model = normalizeRequestedModel(model) ?? model;
 
   // Gemini CLI reads from stdin to avoid shell injection on Windows (shell:true + args array)
   const useStdin = engineInfo.engine === "gemini";

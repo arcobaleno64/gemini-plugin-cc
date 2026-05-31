@@ -20,7 +20,7 @@ Execution rules:
 - That prompt drafting is the only Claude-side work allowed. Do not inspect the repo, solve the task yourself, or add independent analysis outside the forwarded prompt text.
 - Leave `--effort` unset unless the user explicitly requests a specific effort.
 - Leave model unset by default. Add `--model` only when the user explicitly asks for one.
-- Model aliases: `flash` → gemini-2.5-flash, `pro` → gemini-2.5-pro, `lite` → gemini-2.5-flash-lite.
+- Model aliases: `flash` → gemini-3-flash-preview, `pro` → gemini-3.1-pro-preview, `lite` → gemini-2.5-flash-lite.
 - Default to a write-capable run by adding `--write` unless the user explicitly asks for read-only behavior.
 
 Command selection:
@@ -34,10 +34,10 @@ Command selection:
 - `task --resume-last`: for "keep going", "resume", "apply the top fix", or "dig deeper".
 
 Engine routing:
-- Default engine: auto-detect (agy preferred, gemini fallback).
+- Default engine: auto-detect (gemini preferred, agy fallback).
 - Force AGY: add `--engine agy`.
 - Force Gemini CLI: add `--engine gemini`.
-- Note: `--model` is silently ignored when AGY engine is active.
+- Note: `--model` and `--effort` are ignored when the AGY engine is active; AGY selects its model and tier interactively.
 
 Safety rules:
 - Default to write-capable work in `gemini:gemini-rescue` unless the user explicitly asks for read-only behavior.

@@ -25,9 +25,9 @@ Default prompt recipe:
 - `<grounding_rules>` or `<citation_rules>`: required for review, research, or anything that could drift into unsupported claims.
 
 Model selection guidance (`<model_selection>` block):
-- Debug or fix tasks → `--effort high` (→ gemini-2.5-pro)
-- Research or review tasks → `--effort medium` (→ gemini-2.5-flash)
-- Quick formatting or structure tasks → `--effort low` (→ gemini-2.5-flash)
+- Debug or fix tasks → `--effort high` (→ gemini-3.1-pro-preview)
+- Research or review tasks → `--effort medium` (→ gemini-3-flash-preview)
+- Quick formatting or structure tasks → `--effort low` (→ gemini-3-flash-preview)
 - AGY engine: `--model` is ignored; effort controls are irrelevant. Use AGY for speed and simplicity.
 
 When to add blocks:

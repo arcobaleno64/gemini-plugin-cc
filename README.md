@@ -148,12 +148,12 @@ When enabled and the review returns `needs-attention`, Claude Code is blocked fr
 
 | Alias | Resolved Model | Notes |
 |---|---|---|
-| `flash` / `flash3` | `gemini-3.5-flash` | Latest stable Flash (GA) |
-| `pro` / `pro3` | `gemini-3.1-pro` | Gemini 3.1 Pro |
-| `flash25` | `gemini-2.5-flash` | Stable 2.5 Flash |
-| `pro25` | `gemini-2.5-pro` | Stable 2.5 Pro |
-| `lite` / `fast` | `gemini-2.5-flash-lite` | Cost-efficient |
-| `lite3` | `gemini-3.1-flash-lite` | Gemini 3.1 cost-efficient |
+| `flash` / `flash3` | `gemini-3-flash-preview` | Latest Gemini 3 Flash (preview) |
+| `pro` / `pro3` | `gemini-3.1-pro-preview` | Gemini 3.1 Pro (preview) |
+| `flash25` | `gemini-2.5-flash` | Stable 2.5 Flash (GA) |
+| `pro25` | `gemini-2.5-pro` | Stable 2.5 Pro (GA) |
+| `lite` / `fast` | `gemini-2.5-flash-lite` | Cost-efficient (GA) |
+| `lite3` | `gemini-3.1-flash-lite-preview` | Gemini 3.1 cost-efficient (preview) |
 
 ---
 
@@ -165,6 +165,8 @@ In `auto` mode the plugin selects the first available engine in this order:
 2. **`agy`** — fallback; note that AGY in non-interactive mode does not write to a pipe, so explicit `--engine agy` is required to use it.
 
 Override via `--engine` flag or the `GEMINI_ENGINE` environment variable.
+
+> `--model` and `--effort` apply to the **gemini** engine only. AGY selects its model and tier interactively, so the plugin ignores `--model`/`--effort` when `--engine agy` is active.
 
 ---
 

@@ -5,18 +5,18 @@ import { binaryAvailable } from "./process.mjs";
 export const ENGINE_ENV = "GEMINI_ENGINE";
 
 export const MODEL_ALIASES = new Map([
-  // Gemini 3.x — current generation (May 2026)
-  ["flash", "gemini-3.5-flash"],    // latest stable Flash (GA)
-  ["flash3", "gemini-3.5-flash"],
-  ["pro", "gemini-3.1-pro"],        // Gemini 3.1 Pro (renamed from -preview)
-  ["pro3", "gemini-3.1-pro"],
-  // Gemini 2.5 — stable GA aliases for backward compatibility
+  // Gemini 3.x — current generation (preview channel; IDs verified against gemini CLI 0.44.1)
+  ["flash", "gemini-3-flash-preview"],
+  ["flash3", "gemini-3-flash-preview"],
+  ["pro", "gemini-3.1-pro-preview"],
+  ["pro3", "gemini-3.1-pro-preview"],
+  ["lite3", "gemini-3.1-flash-lite-preview"],
+  // Gemini 2.5 — stable GA aliases
   ["flash25", "gemini-2.5-flash"],
   ["pro25", "gemini-2.5-pro"],
-  // Cost-efficient options
+  // Cost-efficient (stable GA)
   ["lite", "gemini-2.5-flash-lite"],
   ["fast", "gemini-2.5-flash-lite"],
-  ["lite3", "gemini-3.1-flash-lite"],
 ]);
 
 export const VALID_EFFORT_LEVELS = new Set(["none", "minimal", "low", "medium", "high", "xhigh"]);
@@ -25,8 +25,8 @@ export function mapEffortToModel(effort) {
   if (!effort) return null;
   const e = String(effort).trim().toLowerCase();
   if (e === "none" || e === "minimal") return "gemini-2.5-flash-lite";
-  if (e === "low" || e === "medium") return "gemini-3.5-flash";
-  if (e === "high" || e === "xhigh") return "gemini-3.1-pro";
+  if (e === "low" || e === "medium") return "gemini-3-flash-preview";
+  if (e === "high" || e === "xhigh") return "gemini-3.1-pro-preview";
   return null;
 }
 

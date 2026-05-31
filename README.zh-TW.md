@@ -146,12 +146,12 @@
 
 | 別名 | 對應模型 | 說明 |
 |---|---|---|
-| `flash` / `flash3` | `gemini-3.5-flash` | 最新穩定 Flash（GA） |
-| `pro` / `pro3` | `gemini-3.1-pro` | Gemini 3.1 Pro |
-| `flash25` | `gemini-2.5-flash` | 穩定 2.5 Flash |
-| `pro25` | `gemini-2.5-pro` | 穩定 2.5 Pro |
-| `lite` / `fast` | `gemini-2.5-flash-lite` | 高效低成本 |
-| `lite3` | `gemini-3.1-flash-lite` | Gemini 3.1 低成本版 |
+| `flash` / `flash3` | `gemini-3-flash-preview` | 最新 Gemini 3 Flash（preview） |
+| `pro` / `pro3` | `gemini-3.1-pro-preview` | Gemini 3.1 Pro（preview） |
+| `flash25` | `gemini-2.5-flash` | 穩定 2.5 Flash（GA） |
+| `pro25` | `gemini-2.5-pro` | 穩定 2.5 Pro（GA） |
+| `lite` / `fast` | `gemini-2.5-flash-lite` | 高效低成本（GA） |
+| `lite3` | `gemini-3.1-flash-lite-preview` | Gemini 3.1 低成本版（preview） |
 
 ---
 
@@ -163,6 +163,8 @@
 2. **`agy`** — 備援引擎；注意 AGY 在非互動模式下無法寫入 pipe，需明確使用 `--engine agy` 才能強制啟用。
 
 可透過 `--engine` 旗標或 `GEMINI_ENGINE` 環境變數覆蓋。
+
+> `--model` 與 `--effort` 僅適用於 **gemini** 引擎。AGY 之模型與分級由其互動選擇，故 `--engine agy` 時外掛會忽略 `--model`/`--effort`。
 
 ---
 
