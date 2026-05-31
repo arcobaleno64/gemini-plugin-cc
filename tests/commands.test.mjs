@@ -55,3 +55,28 @@ test("review and adversarial-review use different prompt templates", () => {
   assert.match(adversarial, /adversarial-review/);
   assert.notEqual(review, adversarial);
 });
+
+// --- P0 mirror-parity regression guards ---
+
+test("rescue invokes the subagent via the Agent tool, not a fork", () => {
+  const source = readCommand("rescue.md");
+  assert.match(source, /allowed-tools:.*\bAgent\b/);
+  assert.match(source, /subagent_type:\s*"gemini:gemini-rescue"/);
+  assert.doesNotMatch(source, /context:\s*fork/);
+});
+
+test("review and adversarial-review are deterministic runners (no fork)", () => {
+  for (const name of ["review.md", "adversarial-review.md"]) {
+    const source = readCommand(name);
+    assert.match(source, /disable-model-invocation:\s*true/, `${name} must disable model invocation`);
+    assert.match(source, /Bash\(git:\*\)/, `${name} must allow git`);
+    assert.doesNotMatch(source, /context:\s*fork/, `${name} must not use context: fork`);
+  }
+});
+
+test("adversarial-review calls the companion adversarial-review subcommand directly", () => {
+  const source = readCommand("adversarial-review.md");
+  assert.match(source, /gemini-companion\.mjs"?\s+adversarial-review/);
+  // It must NOT route through the task-only rescue subagent.
+  assert.doesNotMatch(source, /gemini-rescue/);
+});

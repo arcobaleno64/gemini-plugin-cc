@@ -2,7 +2,7 @@
 
 > 直接從 Claude Code 將任務與對抗性程式碼審查委派給 Google Gemini / AGY。
 
-本外掛鏡像 [openai-codex](https://github.com/openai/codex) 的技能架構——相同的斜線命令 UX、相同的背景工作模型、相同的技能合約——由 Gemini 生態系統驅動。
+本外掛移植自 [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)（Apache-2.0）的技能架構——相同的斜線命令 UX、相同的背景工作模型、相同的技能合約——由 Gemini 生態系統驅動。
 
 ---
 
@@ -213,4 +213,6 @@ Claude Code
 
 ## 授權
 
-MIT © 2026
+MIT © 2026 arcobaleno64。
+
+本專案為 [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)（Copyright 2026 OpenAI，Apache License 2.0）之衍生作品。沿用部分仍受 Apache-2.0 規範（見 [`LICENSE-APACHE-2.0`](LICENSE-APACHE-2.0) 與 [`NOTICE`](NOTICE)）；Gemini/AGY 專屬之變更採 MIT（見 [`LICENSE`](LICENSE)）。
