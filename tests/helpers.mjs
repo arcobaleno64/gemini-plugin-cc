@@ -26,3 +26,10 @@ export function initGitRepo(cwd) {
   run("git", ["config", "commit.gpgsign", "false"], { cwd });
   run("git", ["config", "tag.gpgsign", "false"], { cwd });
 }
+
+export function writeExecutable(filePath, source) {
+  fs.writeFileSync(filePath, source, { encoding: "utf8" });
+  if (process.platform !== "win32") {
+    fs.chmodSync(filePath, 0o755);
+  }
+}
