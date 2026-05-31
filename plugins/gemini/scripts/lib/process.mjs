@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import path from "node:path";
 import process from "node:process";
 
 export function runCommand(command, args = [], options = {}) {
@@ -8,7 +9,10 @@ export function runCommand(command, args = [], options = {}) {
     encoding: "utf8",
     input: options.input,
     stdio: options.stdio ?? "pipe",
-    shell: process.platform === "win32",
+    // Absolute paths are spawned directly (shell:false) so arguments are passed
+    // literally and never re-parsed by the shell. Bare command names still use the
+    // shell on Windows to resolve .cmd/.ps1 wrappers (npm global bins).
+    shell: options.shell ?? (process.platform === "win32" && !path.isAbsolute(command)),
     windowsHide: true,
     ...(options.maxBuffer != null && { maxBuffer: options.maxBuffer }),
     ...(options.timeout != null && { timeout: options.timeout }),
@@ -50,6 +54,22 @@ export function binaryAvailable(command, versionArgs = ["--version"], options = 
     return { available: false, detail };
   }
   return { available: true, detail: result.stdout.trim() || result.stderr.trim() || "ok" };
+}
+
+export function resolveBinaryPath(command) {
+  if (path.isAbsolute(command)) {
+    return command;
+  }
+  const finder = process.platform === "win32" ? "where" : "which";
+  const result = runCommand(finder, [command]);
+  if (result.status !== 0) {
+    return null;
+  }
+  const first = result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)[0];
+  return first || null;
 }
 
 function looksLikeMissingProcessMessage(text) {

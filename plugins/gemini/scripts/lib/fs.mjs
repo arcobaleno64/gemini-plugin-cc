@@ -6,7 +6,7 @@ export function ensureAbsolutePath(cwd, maybePath) {
   return path.isAbsolute(maybePath) ? maybePath : path.resolve(cwd, maybePath);
 }
 
-export function createTempDir(prefix = "codex-plugin-") {
+export function createTempDir(prefix = "gemini-plugin-") {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 

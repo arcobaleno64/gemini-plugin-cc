@@ -265,7 +265,7 @@ async function executeReviewRun(request) {
   const payload = {
     review: reviewName,
     target: context.target,
-    codex: { status: result.status, stdout: result.reviewText },
+    gemini: { status: result.status, stdout: result.reviewText },
     result: parsed.parsed
   };
 
@@ -538,6 +538,9 @@ async function handleTask(argv) {
   const workspaceRoot = resolveCommandWorkspace(options);
   const model = normalizeRequestedModel(options.model);
   const engine = options.engine ?? null;
+  if (options.effort != null && !VALID_EFFORT_LEVELS.has(String(options.effort).trim().toLowerCase())) {
+    throw new Error(`Invalid --effort "${options.effort}". Valid values: ${[...VALID_EFFORT_LEVELS].join(", ")}.`);
+  }
   const prompt = readTaskPrompt(cwd, options, positionals);
 
   const resumeLast = Boolean(options["resume-last"] || options.resume);

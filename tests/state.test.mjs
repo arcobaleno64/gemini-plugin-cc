@@ -10,7 +10,8 @@ import {
   resolveJobLogFile,
   resolveStateDir,
   resolveStateFile,
-  saveState
+  saveState,
+  generateJobId
 } from "../plugins/gemini/scripts/lib/state.mjs";
 
 test("resolveStateDir uses a temp-backed per-workspace directory", () => {
@@ -76,4 +77,10 @@ test("saveState prunes dropped job artifacts when indexed jobs exceed the cap", 
       .flatMap((jobId) => [`${jobId}.json`, `${jobId}.log`])
       .sort()
   );
+});
+
+test("generateJobId produces a prefixed id with a crypto-random suffix", () => {
+  const id = generateJobId("task");
+  assert.match(id, /^task-[0-9a-z]+-[0-9a-f]{10}$/);
+  assert.notEqual(generateJobId("task"), generateJobId("task"));
 });

@@ -71,11 +71,19 @@ export function getWorkingTreeState(cwd) {
   };
 }
 
+function isSafeGitRef(ref) {
+  // Reject a leading dash (git option injection) and shell metacharacters.
+  return /^[A-Za-z0-9_][A-Za-z0-9._/~^@{}+-]*$/.test(String(ref));
+}
+
 export function resolveReviewTarget(cwd, options = {}) {
   ensureGitRepository(cwd);
 
   const requestedScope = options.scope ?? "auto";
   const baseRef = options.base ?? null;
+  if (baseRef != null && !isSafeGitRef(baseRef)) {
+    throw new Error(`Invalid --base ref "${baseRef}". Use a plain git ref (no leading dash or shell metacharacters).`);
+  }
   const state = getWorkingTreeState(cwd);
   const supportedScopes = new Set(["auto", "working-tree", "branch"]);
 
@@ -133,14 +141,35 @@ function formatSection(title, body) {
   return [`## ${title}`, "", body.trim() ? body.trim() : "(none)", ""].join("\n");
 }
 
-function formatUntrackedFile(cwd, relativePath) {
+export function formatUntrackedFile(cwd, relativePath) {
   const absolutePath = path.join(cwd, relativePath);
-  const stat = fs.statSync(absolutePath);
+
+  let stat;
+  try {
+    const linkStat = fs.lstatSync(absolutePath);
+    if (linkStat.isSymbolicLink() && !fs.existsSync(absolutePath)) {
+      return `### ${relativePath}\n(skipped: broken symlink or unreadable file)`;
+    }
+    stat = fs.statSync(absolutePath);
+  } catch {
+    return `### ${relativePath}\n(skipped: broken symlink or unreadable file)`;
+  }
+
+  if (stat.isDirectory()) {
+    return `### ${relativePath}\n(skipped: directory)`;
+  }
+
   if (stat.size > MAX_UNTRACKED_BYTES) {
     return `### ${relativePath}\n(skipped: ${stat.size} bytes exceeds ${MAX_UNTRACKED_BYTES} byte limit)`;
   }
 
-  const buffer = fs.readFileSync(absolutePath);
+  let buffer;
+  try {
+    buffer = fs.readFileSync(absolutePath);
+  } catch {
+    return `### ${relativePath}\n(skipped: broken symlink or unreadable file)`;
+  }
+
   if (!isProbablyText(buffer)) {
     return `### ${relativePath}\n(skipped: binary file)`;
   }
@@ -149,7 +178,7 @@ function formatUntrackedFile(cwd, relativePath) {
 }
 
 function collectWorkingTreeContext(cwd, state) {
-  const status = gitChecked(cwd, ["status", "--short"]).stdout.trim();
+  const status = gitChecked(cwd, ["status", "--short", "--untracked-files=all"]).stdout.trim();
   const stagedDiff = gitChecked(cwd, ["diff", "--cached", "--binary", "--no-ext-diff", "--submodule=diff"]).stdout;
   const unstagedDiff = gitChecked(cwd, ["diff", "--binary", "--no-ext-diff", "--submodule=diff"]).stdout;
   const untrackedBody = state.untracked.map((file) => formatUntrackedFile(cwd, file)).join("\n\n");

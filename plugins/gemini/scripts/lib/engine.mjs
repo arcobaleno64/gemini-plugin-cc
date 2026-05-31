@@ -1,6 +1,6 @@
 import process from "node:process";
 
-import { binaryAvailable } from "./process.mjs";
+import { binaryAvailable, resolveBinaryPath } from "./process.mjs";
 
 export const ENGINE_ENV = "GEMINI_ENGINE";
 
@@ -49,7 +49,7 @@ export function detectEngine(requestedEngine = null) {
   if (normalized === "agy") {
     const status = binaryAvailable("agy", ["--version"]);
     if (!status.available) throw new Error("AGY engine requested but agy binary is not available.");
-    return { engine: "agy", binary: "agy", version: status.detail ?? "unknown" };
+    return { engine: "agy", binary: resolveBinaryPath("agy") ?? "agy", version: status.detail ?? "unknown" };
   }
 
   if (normalized === "gemini") {
@@ -66,7 +66,7 @@ export function detectEngine(requestedEngine = null) {
 
   const agyStatus = binaryAvailable("agy", ["--version"]);
   if (agyStatus.available) {
-    return { engine: "agy", binary: "agy", version: agyStatus.detail ?? "unknown" };
+    return { engine: "agy", binary: resolveBinaryPath("agy") ?? "agy", version: agyStatus.detail ?? "unknown" };
   }
 
   throw new Error("No Gemini or AGY engine found. Install agy or gemini CLI and retry.");

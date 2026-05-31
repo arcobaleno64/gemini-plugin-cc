@@ -98,7 +98,7 @@ function escapeMarkdownCell(value) {
     .trim();
 }
 
-function formatCodexResumeCommand(job) {
+function formatGeminiResumeCommand(job) {
   if (!job?.threadId) {
     return null;
   }
@@ -137,7 +137,7 @@ function pushJobDetails(lines, job, options = {}) {
   if (job.threadId) {
     lines.push(`  Gemini session ID: ${job.threadId}`);
   }
-  const resumeCommand = formatCodexResumeCommand(job);
+  const resumeCommand = formatGeminiResumeCommand(job);
   if (resumeCommand) {
     lines.push(`  Resume in Gemini: ${resumeCommand}`);
   }

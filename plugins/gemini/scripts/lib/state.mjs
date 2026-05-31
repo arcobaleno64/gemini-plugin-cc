@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -120,7 +120,7 @@ export function updateState(cwd, mutate) {
 }
 
 export function generateJobId(prefix = "job") {
-  const random = Math.random().toString(36).slice(2, 8);
+  const random = randomBytes(5).toString("hex");
   return `${prefix}-${Date.now().toString(36)}-${random}`;
 }
 
