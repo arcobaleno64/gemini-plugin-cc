@@ -3,7 +3,7 @@ import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { collectReviewContext, getWorkingTreeState, resolveReviewTarget } from "../plugins/gemini/scripts/lib/git.mjs";
+import { collectReviewContext, formatUntrackedFile, getWorkingTreeState, resolveReviewTarget } from "../plugins/gemini/scripts/lib/git.mjs";
 import { initGitRepo, makeTempDir, run } from "./helpers.mjs";
 
 function commitInitial(cwd) {
@@ -88,4 +88,26 @@ test("getWorkingTreeState reflects staged, unstaged, and untracked files", () =>
   assert.equal(state.isDirty, true);
   assert.ok(state.unstaged.includes("app.js"));
   assert.ok(state.untracked.includes("untracked.js"));
+});
+
+test("resolveReviewTarget rejects an unsafe --base ref", () => {
+  const cwd = makeTempDir();
+  initGitRepo(cwd);
+  commitInitial(cwd);
+  assert.throws(() => resolveReviewTarget(cwd, { base: "--upload-pack=evil" }), /Invalid --base ref/);
+  assert.throws(() => resolveReviewTarget(cwd, { base: "x; rm -rf /" }), /Invalid --base ref/);
+});
+
+test("formatUntrackedFile skips a directory instead of crashing", () => {
+  const cwd = makeTempDir();
+  fs.mkdirSync(path.join(cwd, "a-dir"));
+  assert.match(formatUntrackedFile(cwd, "a-dir"), /\(skipped: directory\)/);
+});
+
+test("formatUntrackedFile inlines a small text file", () => {
+  const cwd = makeTempDir();
+  fs.writeFileSync(path.join(cwd, "note.txt"), "hello content\n");
+  const out = formatUntrackedFile(cwd, "note.txt");
+  assert.match(out, /### note\.txt/);
+  assert.match(out, /hello content/);
 });

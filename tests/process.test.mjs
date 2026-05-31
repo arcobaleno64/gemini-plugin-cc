@@ -5,7 +5,8 @@ import process from "node:process";
 import {
   terminateProcessTree,
   binaryAvailable,
-  formatCommandFailure
+  formatCommandFailure,
+  resolveBinaryPath
 } from "../plugins/gemini/scripts/lib/process.mjs";
 
 test("terminateProcessTree uses taskkill on Windows", () => {
@@ -78,6 +79,13 @@ test("binaryAvailable detects an available binary", () => {
 test("binaryAvailable reports an unavailable binary", () => {
   const result = binaryAvailable("definitely-not-a-real-binary-xyz-123", ["--version"]);
   assert.equal(result.available, false);
+});
+
+test("resolveBinaryPath finds a PATH command and passes absolute paths through", () => {
+  const git = resolveBinaryPath("git");
+  assert.equal(typeof git, "string");
+  assert.match(git, /git/i);
+  assert.equal(resolveBinaryPath("/already/absolute/tool"), "/already/absolute/tool");
 });
 
 test("formatCommandFailure formats exit-code and signal failures", () => {

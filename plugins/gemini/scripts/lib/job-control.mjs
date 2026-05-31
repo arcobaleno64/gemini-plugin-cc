@@ -231,6 +231,7 @@ export function buildStatusSnapshot(cwd, options = {}) {
   return {
     workspaceRoot,
     config,
+    needsReview: Boolean(config.stopReviewGateEnabled),
     sessionRuntime: getSessionRuntimeStatus(options.env),
     running,
     latestFinished,
