@@ -1,0 +1,16 @@
+gemini-plugin-cc
+Copyright (c) 2026 arcobaleno64
+
+This product is a derivative work of openai/codex-plugin-cc
+(https://github.com/openai/codex-plugin-cc), Copyright 2026 OpenAI,
+licensed under the Apache License, Version 2.0.
+
+Portions of this software (its repository structure, runtime orchestration,
+command and skill contracts, and companion scripts) are adapted from that
+project and remain subject to the Apache License, Version 2.0; a copy is
+provided in LICENSE-APACHE-2.0. These files have been modified from the
+originals.
+
+Gemini/AGY-specific modifications and additions are
+Copyright (c) 2026 arcobaleno64 and are distributed under the MIT License
+(see LICENSE).

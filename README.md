@@ -4,7 +4,7 @@
 
 [繁體中文說明 →](README.zh-TW.md)
 
-Mirrors the [openai-codex](https://github.com/openai/codex) skill architecture — same slash-command UX, same background job model, same skill contract — powered by the Gemini ecosystem instead of OpenAI.
+Ported from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (Apache-2.0) — same slash-command UX, same background job model, same skill contract — powered by the Gemini ecosystem instead of OpenAI.
 
 ---
 
@@ -215,4 +215,6 @@ See [CHANGELOG.md](plugins/gemini/CHANGELOG.md).
 
 ## License
 
-MIT © 2026
+MIT © 2026 arcobaleno64.
+
+This project is a derivative work of [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc), Copyright 2026 OpenAI, licensed under the Apache License, Version 2.0. Adapted portions remain under Apache-2.0 (see [`LICENSE-APACHE-2.0`](LICENSE-APACHE-2.0) and [`NOTICE`](NOTICE)); Gemini/AGY-specific changes are MIT (see [`LICENSE`](LICENSE)).

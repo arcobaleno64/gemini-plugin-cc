@@ -52,13 +52,13 @@ Return ONLY a valid JSON object with exactly this shape — no markdown fences, 
   "summary": "<one terse ship/no-ship sentence>",
   "findings": [
     {
+      "severity": "critical" | "high" | "medium" | "low",
+      "title": "<short finding title>",
+      "body": "<what can go wrong, why this path is vulnerable, and the likely impact>",
       "file": "<relative path>",
       "line_start": <integer>,
       "line_end": <integer>,
       "confidence": <0.0–1.0>,
-      "what_can_go_wrong": "<string>",
-      "why_vulnerable": "<string>",
-      "likely_impact": "<string>",
       "recommendation": "<concrete actionable change>"
     }
   ],
