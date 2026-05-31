@@ -9,7 +9,8 @@
 ## 功能特色
 
 - **`/gemini:rescue`** — 將調查、除錯或實作任務委派給 Gemini。可在前景執行或以背景工作方式分離執行。
-- **`/gemini:adversarial-review`** — 對當前 diff 或分支執行對抗性程式碼審查，回傳含嚴重程度評級的結構化發現。
+- **`/gemini:review`** — 對當前 diff 或分支執行標準（務實）程式碼審查，找出真實 bug、缺漏之錯誤處理與未竟之程式路徑。
+- **`/gemini:adversarial-review`** — 對當前 diff 或分支執行對抗性程式碼審查，挑戰設計決策，回傳含嚴重程度評級的結構化發現。
 - **`/gemini:setup`** — 檢查 Gemini CLI / AGY 的可用性與 OAuth 狀態。
 - **`/gemini:status`** — 查看作用中與已完成的背景工作。
 - **`/gemini:result`** / **`/gemini:cancel`** — 取得或取消背景工作。
@@ -24,7 +25,7 @@
 | 項目 | 版本 | 安裝方式 |
 |---|---|---|
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
-| Gemini CLI | ≥ 0.40 | `npm install -g @google/generative-ai-cli` |
+| Gemini CLI | ≥ 0.40 | `npm install -g @google/gemini-cli` |
 | AGY _(選用)_ | ≥ 1.0 | `npm install -g agy` |
 | Claude Code | 任意版本 | [claude.ai/code](https://claude.ai/code) |
 
@@ -39,10 +40,10 @@
 /plugin marketplace add arcobaleno64/gemini-plugin-cc
 
 # 2. 安裝外掛
-/plugin install arcobaleno64/gemini-plugin-cc
+/plugin install gemini@gemini-plugin-cc
 
 # 3. 重新載入外掛
-/plugins reload
+/reload-plugins
 ```
 
 接著執行 `/gemini:setup`——若 Gemini CLI 尚未安裝且 npm 可用，指令會提供自動安裝選項。
@@ -89,6 +90,18 @@
 | `--engine <gemini\|agy\|auto>` | 覆蓋引擎選擇 |
 | `--model <別名\|ID>` | 指定模型（`flash`、`pro`、`lite`） |
 | `--effort <low\|medium\|high\|xhigh>` | 以努力等級對應模型選擇 |
+
+### `/gemini:review`
+
+對當前工作樹或分支 diff 執行標準、務實之審查——真實 bug、缺漏之錯誤處理、未竟之程式路徑。不可導向、不接受焦點文字；如需挑戰特定決策請用 `/gemini:adversarial-review`。
+
+| 旗標 | 說明 |
+|---|---|
+| `--wait` / `--background` | 前景或分離執行 |
+| `--base <ref>` | 與特定 git ref 比較 |
+| `--scope <auto\|working-tree\|branch>` | Diff 範圍 |
+| `--engine <gemini\|agy\|auto>` | 覆蓋引擎 |
+| `--model <別名\|ID>` | 指定模型 |
 
 ### `/gemini:adversarial-review [焦點]`
 
@@ -170,9 +183,8 @@
 
 ## 安全性
 
-- **Stdin 傳遞**：提示從不插入 shell 命令字串，而是透過 stdin（Node.js `spawnSync` 的 `input` 選項）傳遞給 Gemini CLI，無論提示內容為何都不存在 shell injection 風險。
-- **無 secrets 入碼**：OAuth 憑證保存於 `~/.gemini/oauth_creds.json`，本外掛從不將其讀入記憶體。
-- **Token 有效期偵測**：`getGeminiLoginStatus()` 解析憑證檔案並在任何呼叫前回報已過期的 token。
+- **Stdin 傳遞（gemini 引擎）**：`gemini` 引擎之提示透過 stdin（Node.js `spawnSync` 的 `input` 選項）傳遞、從不插入 shell 命令字串，故無論內容為何皆無 shell injection 風險。`agy` 引擎無 stdin 模式，提示以 CLI 引數傳入；處理不可信輸入時請優先使用預設之 `gemini` 引擎。
+- **憑證處理**：`~/.gemini/oauth_creds.json` 之 OAuth 憑證僅用於 `getGeminiLoginStatus()` 檢查 token 是否過期；本外掛從不記錄、複製或傳輸之。
 - **`.gitignore`**：`.omc/` 狀態目錄（工作日誌、會話狀態）已排除於版本控制之外。
 
 ---
@@ -187,7 +199,7 @@ Claude Code
             ├─ buildCliArgs()        → 引數（gemini 模式不含提示）
             ├─ runCommand()          → spawnSync，提示透過 stdin 傳入
             │    shell: true (Win)   ← 修復 Windows .cmd wrapper 問題
-            │    input: prompt       ← 修復 shell injection 風險
+            │    input: prompt       ← gemini 引擎：提示經 stdin（不經 shell 解析）
             └─ renderTaskResult()   → Markdown 輸出至 Claude
 ```
 

@@ -1,7 +1,7 @@
 ---
 description: Check whether Gemini CLI / AGY is ready and optionally toggle the stop-time review gate
 argument-hint: '[--engine <agy|gemini>] [--enable-review-gate|--disable-review-gate]'
-allowed-tools: Bash(node:*), AskUserQuestion
+allowed-tools: Bash(node:*), Bash(npm:*), AskUserQuestion
 ---
 
 Run:
@@ -37,7 +37,7 @@ If Gemini CLI is unavailable and AGY is also unavailable:
 - If the user chooses install, run:
 
 ```bash
-npm install -g @google/generative-ai-cli
+npm install -g @google/gemini-cli
 ```
 
 - Then rerun:

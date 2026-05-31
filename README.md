@@ -11,7 +11,8 @@ Ported from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) 
 ## Features
 
 - **`/gemini:rescue`** — Delegate investigation, debugging, or implementation tasks to Gemini. Runs in the foreground or detached in the background.
-- **`/gemini:adversarial-review`** — Adversarial code review over the current diff or branch. Returns structured findings with severity ratings.
+- **`/gemini:review`** — Standard (pragmatic) code review over the current diff or branch. Finds real bugs, missing error handling, and incomplete code paths.
+- **`/gemini:adversarial-review`** — Adversarial code review that challenges design decisions over the current diff or branch. Returns structured findings with severity ratings.
 - **`/gemini:setup`** — Check Gemini CLI / AGY availability and OAuth status.
 - **`/gemini:status`** — Inspect active and completed background jobs.
 - **`/gemini:result`** / **`/gemini:cancel`** — Retrieve or cancel a background job.
@@ -26,7 +27,7 @@ Ported from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) 
 | Requirement | Version | Install |
 |---|---|---|
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
-| Gemini CLI | ≥ 0.40 | `npm install -g @google/generative-ai-cli` |
+| Gemini CLI | ≥ 0.40 | `npm install -g @google/gemini-cli` |
 | AGY _(optional)_ | ≥ 1.0 | `npm install -g agy` |
 | Claude Code | any | [claude.ai/code](https://claude.ai/code) |
 
@@ -41,10 +42,10 @@ Ported from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) 
 /plugin marketplace add arcobaleno64/gemini-plugin-cc
 
 # 2. Install the plugin
-/plugin install arcobaleno64/gemini-plugin-cc
+/plugin install gemini@gemini-plugin-cc
 
 # 3. Reload plugins
-/plugins reload
+/reload-plugins
 ```
 
 Then run `/gemini:setup` — it will check whether Gemini CLI is ready. If Gemini is missing and npm is available, it will offer to install it for you.
@@ -91,6 +92,18 @@ Delegates a task to Gemini. Reads from stdin if no prompt is given.
 | `--engine <gemini\|agy\|auto>` | Override engine selection |
 | `--model <alias\|id>` | Model override (`flash`, `pro`, `lite`) |
 | `--effort <low\|medium\|high\|xhigh>` | Map effort level to a model |
+
+### `/gemini:review`
+
+Runs a standard, pragmatic review over the current working tree or branch diff — real bugs, missing error handling, and incomplete code paths. Not steerable and takes no focus text; use `/gemini:adversarial-review` to challenge a specific decision.
+
+| Flag | Description |
+|---|---|
+| `--wait` / `--background` | Run in the foreground or detached |
+| `--base <ref>` | Compare against a specific git ref |
+| `--scope <auto\|working-tree\|branch>` | Diff scope |
+| `--engine <gemini\|agy\|auto>` | Override engine |
+| `--model <alias\|id>` | Model override |
 
 ### `/gemini:adversarial-review [focus]`
 
@@ -172,9 +185,8 @@ Override via `--engine` flag or the `GEMINI_ENGINE` environment variable.
 
 ## Security
 
-- **Stdin delivery**: Prompts are never interpolated into shell command strings. They are passed to the Gemini CLI via `stdin` (using Node's `spawnSync` `input` option), which eliminates shell-injection risk regardless of prompt content.
-- **No secrets in code**: OAuth credentials live in `~/.gemini/oauth_creds.json` and are never read into process memory by this plugin.
-- **Token expiry detection**: `getGeminiLoginStatus()` parses the credential file and reports expired tokens before any invocation attempt.
+- **Stdin delivery (gemini engine)**: For the `gemini` engine, prompts are passed via `stdin` (Node's `spawnSync` `input` option) and never interpolated into a shell string, eliminating shell-injection risk regardless of prompt content. The `agy` engine has no stdin mode and receives the prompt as a CLI argument, so prefer the default `gemini` engine for untrusted input.
+- **Credential handling**: OAuth credentials in `~/.gemini/oauth_creds.json` are read only to check token expiry via `getGeminiLoginStatus()`; they are never logged, copied elsewhere, or transmitted by this plugin.
 - **`.gitignore`**: The `.omc/` state directory (job logs, session state) is excluded from version control.
 
 ---
@@ -189,7 +201,7 @@ Claude Code
             ├─ buildCliArgs()        → args (no prompt in args for gemini)
             ├─ runCommand()          → spawnSync, prompt via stdin
             │    shell: true (Win)   ← fixes Windows .cmd wrapper
-            │    input: prompt       ← fixes shell injection
+            │    input: prompt       ← gemini engine: prompt via stdin (no shell parsing)
             └─ renderTaskResult()   → Markdown output to Claude
 ```
 

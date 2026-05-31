@@ -156,7 +156,7 @@ function buildSetupReport(cwd, actionsTaken = []) {
 
   const nextSteps = [];
   if (!geminiStatus.available && !agyStatus.available) {
-    nextSteps.push("Install gemini CLI: `npm install -g @google/generative-ai-cli` or install agy.");
+    nextSteps.push("Install gemini CLI: `npm install -g @google/gemini-cli` or install agy.");
   }
   if (geminiStatus.available && !geminiAuth.loggedIn) {
     nextSteps.push("Run `gemini` once to authenticate via OAuth.");
