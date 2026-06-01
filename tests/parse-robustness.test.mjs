@@ -38,3 +38,14 @@ test("returns null when no JSON object is present", () => {
   assert.equal(tryParseJsonFromText("no json here"), null);
   assert.equal(tryParseJsonFromText(""), null);
 });
+
+test("parses the outer gemini envelope carrying a stringified response", () => {
+  const obj = tryParseJsonFromText('{"session_id":"thr_1","response":"hello world"}');
+  assert.equal(obj.session_id, "thr_1");
+  assert.equal(obj.response, "hello world");
+});
+
+test("recovers the JSON object when trailing log noise follows it", () => {
+  const obj = tryParseJsonFromText('{"verdict":"approve","summary":"s","findings":[]}\nDone. exit 0\n');
+  assert.equal(obj.verdict, "approve");
+});

@@ -1,33 +1,18 @@
 import process from "node:process";
 
 import { binaryAvailable, resolveBinaryPath } from "./process.mjs";
+import { EFFORT_MODEL_MAP, MODEL_ALIASES, VALID_EFFORT_LEVELS } from "./model-map.mjs";
 
 export const ENGINE_ENV = "GEMINI_ENGINE";
 
-export const MODEL_ALIASES = new Map([
-  // Gemini 3.x — current generation (preview channel; IDs verified against gemini CLI 0.44.1)
-  ["flash", "gemini-3-flash-preview"],
-  ["flash3", "gemini-3-flash-preview"],
-  ["pro", "gemini-3.1-pro-preview"],
-  ["pro3", "gemini-3.1-pro-preview"],
-  ["lite3", "gemini-3.1-flash-lite-preview"],
-  // Gemini 2.5 — stable GA aliases
-  ["flash25", "gemini-2.5-flash"],
-  ["pro25", "gemini-2.5-pro"],
-  // Cost-efficient (stable GA)
-  ["lite", "gemini-2.5-flash-lite"],
-  ["fast", "gemini-2.5-flash-lite"],
-]);
-
-export const VALID_EFFORT_LEVELS = new Set(["none", "minimal", "low", "medium", "high", "xhigh"]);
+// Model aliases and effort tiers live in model-map.mjs (single source of truth,
+// verified against the README table). Re-exported here for existing importers.
+export { MODEL_ALIASES, VALID_EFFORT_LEVELS };
 
 export function mapEffortToModel(effort) {
   if (!effort) return null;
   const e = String(effort).trim().toLowerCase();
-  if (e === "none" || e === "minimal") return "gemini-2.5-flash-lite";
-  if (e === "low" || e === "medium") return "gemini-3-flash-preview";
-  if (e === "high" || e === "xhigh") return "gemini-3.1-pro-preview";
-  return null;
+  return EFFORT_MODEL_MAP.get(e) ?? null;
 }
 
 export function normalizeRequestedModel(model) {

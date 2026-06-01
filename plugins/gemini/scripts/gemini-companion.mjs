@@ -23,6 +23,7 @@ import {
 import {
   buildSingleJobSnapshot,
   buildStatusSnapshot,
+  filterJobsForCurrentSession,
   readStoredJob,
   resolveCancelableJob,
   resolveResultJob,
@@ -250,7 +251,11 @@ async function waitForSingleJobSnapshot(cwd, reference, options = {}) {
 
 async function resolveLatestTrackedTaskThread(cwd, options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
-  const jobs = sortJobsNewestFirst(listJobs(workspaceRoot)).filter((job) => job.id !== options.excludeJobId);
+  // Only consider jobs from the current Claude session so a resume never jumps
+  // into another session's (or another project's) thread.
+  const jobs = sortJobsNewestFirst(filterJobsForCurrentSession(listJobs(workspaceRoot))).filter(
+    (job) => job.id !== options.excludeJobId
+  );
   const activeTask = jobs.find((job) => job.jobClass === "task" && (job.status === "queued" || job.status === "running"));
   if (activeTask) {
     throw new Error(`Task ${activeTask.id} is still running. Use /gemini:status before continuing it.`);
@@ -716,7 +721,8 @@ async function handleTaskResumeCandidate(argv) {
   });
   const cwd = resolveCommandCwd(options);
   const workspaceRoot = resolveCommandWorkspace(options);
-  const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
+  // Resume candidates are scoped to the current Claude session by default.
+  const jobs = sortJobsNewestFirst(filterJobsForCurrentSession(listJobs(workspaceRoot)));
   const activeTask = jobs.find((job) => job.jobClass === "task" && (job.status === "queued" || job.status === "running"));
   if (activeTask) {
     const payload = { found: false, blocked: true, activeJobId: activeTask.id };
