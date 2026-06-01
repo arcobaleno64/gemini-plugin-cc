@@ -19,3 +19,4 @@ Present the full command output to the user. Do not summarize or condense it. Pr
 - File paths and line numbers exactly as reported
 - Any error messages or parse errors
 - Follow-up commands such as `/gemini:status <id>`, `/gemini:review --wait`, and `/gemini:adversarial-review --wait`
+- The session/conversation ID and its resume command, which are engine-specific: gemini jobs show `Gemini session ID` + `gemini --resume <id>`; AGY jobs show `AGY conversation ID` + `agy --conversation <id>`

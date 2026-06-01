@@ -30,7 +30,11 @@ export const MODEL_ALIAS_ENTRIES = [
 export const MODEL_ALIASES = new Map(MODEL_ALIAS_ENTRIES.map((entry) => [entry.alias, entry.model]));
 
 // Reasoning-effort tier -> resolved model, used when --effort is supplied
-// without an explicit --model. (AGY ignores both; see lib/gemini.mjs.)
+// without an explicit --model. These apply to the GEMINI engine only: AGY's
+// `agy --print` is hardcoded to Gemini 3.5 Flash (High) and exposes no
+// --model/--effort flag (env / settings.json cannot override it), so both are
+// ignored on the AGY path — higher/other tiers are reachable only via gemini.
+// See lib/gemini.mjs (the agy branch nulls model and emits a note).
 export const EFFORT_MODEL_MAP = new Map([
   ["none", "gemini-2.5-flash-lite"],
   ["minimal", "gemini-2.5-flash-lite"],

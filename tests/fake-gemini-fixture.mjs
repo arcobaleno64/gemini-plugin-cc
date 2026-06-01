@@ -55,6 +55,19 @@ export function removeGeminiCredentials(binDir) {
   fs.rmSync(path.join(binDir, "gemini-home", "oauth_creds.json"), { force: true });
 }
 
+// Write ~/.gemini/settings.json with the given auth type so getGeminiPlanTier()
+// can classify the plan (e.g. "oauth-personal" => personal, EOL 2026-06-18).
+export function writeGeminiSettings(binDir, selectedType = "oauth-personal") {
+  const geminiHome = path.join(binDir, "gemini-home");
+  fs.mkdirSync(geminiHome, { recursive: true });
+  fs.writeFileSync(
+    path.join(geminiHome, "settings.json"),
+    JSON.stringify({ security: { auth: { selectedType } } }, null, 2),
+    "utf8"
+  );
+  return geminiHome;
+}
+
 // Write OAuth credentials whose expiry_date is already in the past so
 // getGeminiLoginStatus() reports loggedIn:false (expired token).
 export function writeExpiredGeminiCredentials(binDir) {

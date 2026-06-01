@@ -56,6 +56,7 @@ import {
   getAgyAvailability,
   getGeminiLoginStatus,
   getAgyLoginStatus,
+  getGeminiPlanTier,
   getSessionRuntimeStatus
 } from "./lib/gemini.mjs";
 
@@ -153,6 +154,7 @@ function buildSetupReport(cwd, actionsTaken = [], options = {}) {
   const agyStatus = getAgyAvailability();
   const geminiAuth = getGeminiLoginStatus(cwd);
   const agyAuth = getAgyLoginStatus();
+  const geminiPlanTier = getGeminiPlanTier();
   const config = getConfig(workspaceRoot) ?? {};
 
   // Readiness is computed for the engine the user actually selected (via
@@ -198,7 +200,7 @@ function buildSetupReport(cwd, actionsTaken = [], options = {}) {
   }
   if (agySelected && !agyStatus.available) {
     nextSteps.push(
-      "AGY was requested via `--engine agy` but is not installed. Install it with `npm install -g agy`, or drop `--engine agy` to use the default Gemini CLI."
+      "AGY was requested via `--engine agy` but is not installed. Install it with `curl -fsSL https://antigravity.google/cli/install.sh | bash`, or drop `--engine agy` to use the default Gemini CLI."
     );
   }
   if (agySelected && agyStatus.available) {
@@ -218,12 +220,21 @@ function buildSetupReport(cwd, actionsTaken = [], options = {}) {
     );
   }
 
+  // Personal (free) plan EOL: warn that gemini CLI free access ends 2026-06-18.
+  // Enterprise / Code Assist tiers are unaffected; an unknown tier stays silent.
+  if (geminiPlanTier.tier === "personal") {
+    nextSteps.push(
+      "Heads-up: Gemini personal-plan free CLI access ends 2026-06-18. To keep the gemini engine after that, upgrade to Gemini Code Assist Standard/Enterprise; otherwise route through AGY (`--engine agy`) — the plugin reads AGY responses from its on-disk transcript because `agy --print` does not pipe output (upstream google-gemini/gemini-cli#27466)."
+    );
+  }
+
   return {
     ready,
     readyState,
     requestedEngine: requestedEngine || "auto",
     geminiReady,
     agyFallbackAvailable,
+    geminiPlanTier,
     node: nodeStatus,
     npm: npmStatus,
     gemini: geminiStatus,
@@ -347,6 +358,7 @@ async function executeReviewRun(request) {
     exitStatus: result.status,
     threadId: null,
     turnId: null,
+    engine: result.engine ?? null,
     payload,
     rendered: renderReviewResult(parsed, {
       reviewLabel: reviewName,
@@ -406,6 +418,7 @@ async function executeTaskRun(request) {
     exitStatus: result.status,
     threadId: result.threadId ?? null,
     turnId: null,
+    engine: result.engine ?? null,
     payload,
     rendered,
     summary: firstMeaningfulLine(rawOutput, firstMeaningfulLine(failureMessage, `${taskMetadata.title} finished.`)),

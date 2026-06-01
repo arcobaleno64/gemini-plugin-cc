@@ -26,8 +26,10 @@
 |---|---|---|
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
 | Gemini CLI | ≥ 0.40 | `npm install -g @google/gemini-cli` |
-| AGY _(選用)_ | ≥ 1.0 | `npm install -g agy` |
+| AGY _(選用)_ | 1.0.3 | _(安裝指令見下)_ |
 | Claude Code | 任意版本 | [claude.ai/code](https://claude.ai/code) |
+
+**安裝 AGY**（選用備援）：`curl -fsSL https://antigravity.google/cli/install.sh | bash`
 
 **認證**：執行一次 `gemini` 完成 OAuth 登入。不需要 API 金鑰。
 

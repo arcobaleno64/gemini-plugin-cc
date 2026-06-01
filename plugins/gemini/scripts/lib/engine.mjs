@@ -2,6 +2,7 @@ import process from "node:process";
 
 import { binaryAvailable, resolveBinaryPath } from "./process.mjs";
 import { EFFORT_MODEL_MAP, MODEL_ALIASES, VALID_EFFORT_LEVELS } from "./model-map.mjs";
+import { resolveAgyBrainRoot } from "./agy-transcript.mjs";
 
 export const ENGINE_ENV = "GEMINI_ENGINE";
 
@@ -49,6 +50,16 @@ export function detectEngine(requestedEngine = null) {
   if (normalized === "agy") {
     const status = binaryAvailable("agy", ["--version"]);
     if (!status.available) throw new Error("AGY engine requested but agy binary is not available.");
+    // `agy --print` does not emit its response over a pipe in non-TTY use
+    // (upstream bug google-gemini/gemini-cli#27466); the plugin recovers the
+    // response from agy's on-disk transcript instead (see agy-transcript.mjs and
+    // runGeminiTurn). If no transcript brain dir exists on this platform there is
+    // nothing to recover from, so fail loud rather than spawn empty-handed.
+    if (!resolveAgyBrainRoot()) {
+      throw new Error(
+        "AGY engine requested but `agy --print` cannot return output over a pipe (upstream bug google-gemini/gemini-cli#27466) and no transcript brain dir was found to recover from on this platform. Run `agy` once interactively to initialize it, or use `--engine gemini`."
+      );
+    }
     return { engine: "agy", binary: resolveBinaryPath("agy") ?? "agy", version: status.detail ?? "unknown" };
   }
 
@@ -58,7 +69,13 @@ export function detectEngine(requestedEngine = null) {
     return { engine: "gemini", binary: "gemini", version: status.detail ?? "unknown" };
   }
 
-  // auto: prefer gemini — AGY cannot output via pipe in non-interactive mode
+  // auto: prefer gemini. AGY exposes a `--print` flag, but its response does not
+  // come through a pipe in non-interactive (non-TTY) use — local verification on
+  // agy 1.0.3 (2026-06) had `agy --print` return empty stdout or hang to its
+  // print-timeout under the exact piped spawn this plugin uses, while
+  // `gemini -p --output-format json` piped a clean JSON envelope every time.
+  // gemini is therefore the only engine reliable for this spawn model; AGY stays
+  // a last resort when gemini is entirely absent.
   const geminiStatus = binaryAvailable("gemini", ["--version"]);
   if (geminiStatus.available) {
     return { engine: "gemini", binary: "gemini", version: geminiStatus.detail ?? "unknown" };

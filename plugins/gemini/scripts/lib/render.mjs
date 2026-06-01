@@ -98,11 +98,17 @@ function escapeMarkdownCell(value) {
     .trim();
 }
 
-function formatGeminiResumeCommand(job) {
-  if (!job?.threadId) {
+// Engine-aware resume hint. A gemini session resumes via the `--resume` flag
+// (there is no `gemini resume` subcommand); an AGY conversation resumes via
+// `agy --conversation <id>`. Returns null when there is no thread to resume.
+function resumeInfo(engine, threadId) {
+  if (!threadId) {
     return null;
   }
-  return `gemini resume ${job.threadId}`;
+  if (engine === "agy") {
+    return { idLabel: "AGY conversation ID", resumeLabel: "Resume in AGY", command: `agy --conversation ${threadId}` };
+  }
+  return { idLabel: "Gemini session ID", resumeLabel: "Resume in Gemini", command: `gemini --resume ${threadId}` };
 }
 
 function appendActiveJobsTable(lines, jobs) {
@@ -134,12 +140,10 @@ function pushJobDetails(lines, job, options = {}) {
   if (options.showDuration && job.duration) {
     lines.push(`  Duration: ${job.duration}`);
   }
-  if (job.threadId) {
-    lines.push(`  Gemini session ID: ${job.threadId}`);
-  }
-  const resumeCommand = formatGeminiResumeCommand(job);
-  if (resumeCommand) {
-    lines.push(`  Resume in Gemini: ${resumeCommand}`);
+  const resume = resumeInfo(job.engine, job.threadId);
+  if (resume) {
+    lines.push(`  ${resume.idLabel}: ${job.threadId}`);
+    lines.push(`  ${resume.resumeLabel}: ${resume.command}`);
   }
   if (job.logFile && options.showLog) {
     lines.push(`  Log: ${job.logFile}`);
@@ -399,13 +403,14 @@ export function renderJobStatusReport(job) {
 
 export function renderStoredJobResult(job, storedJob) {
   const threadId = storedJob?.threadId ?? job.threadId ?? null;
-  const resumeCommand = threadId ? `gemini resume ${threadId}` : null;
+  const engine = storedJob?.engine ?? job?.engine ?? null;
+  const resume = resumeInfo(engine, threadId);
   if (isStructuredReviewStoredResult(storedJob) && storedJob?.rendered) {
     const output = storedJob.rendered.endsWith("\n") ? storedJob.rendered : `${storedJob.rendered}\n`;
-    if (!threadId) {
+    if (!resume) {
       return output;
     }
-    return `${output}\nGemini session ID: ${threadId}\nResume in Gemini: ${resumeCommand}\n`;
+    return `${output}\n${resume.idLabel}: ${threadId}\n${resume.resumeLabel}: ${resume.command}\n`;
   }
 
   const rawOutput =
@@ -414,18 +419,18 @@ export function renderStoredJobResult(job, storedJob) {
     "";
   if (rawOutput) {
     const output = rawOutput.endsWith("\n") ? rawOutput : `${rawOutput}\n`;
-    if (!threadId) {
+    if (!resume) {
       return output;
     }
-    return `${output}\nGemini session ID: ${threadId}\nResume in Gemini: ${resumeCommand}\n`;
+    return `${output}\n${resume.idLabel}: ${threadId}\n${resume.resumeLabel}: ${resume.command}\n`;
   }
 
   if (storedJob?.rendered) {
     const output = storedJob.rendered.endsWith("\n") ? storedJob.rendered : `${storedJob.rendered}\n`;
-    if (!threadId) {
+    if (!resume) {
       return output;
     }
-    return `${output}\nGemini session ID: ${threadId}\nResume in Gemini: ${resumeCommand}\n`;
+    return `${output}\n${resume.idLabel}: ${threadId}\n${resume.resumeLabel}: ${resume.command}\n`;
   }
 
   const lines = [
@@ -435,9 +440,9 @@ export function renderStoredJobResult(job, storedJob) {
     `Status: ${job.status}`
   ];
 
-  if (threadId) {
-    lines.push(`Gemini session ID: ${threadId}`);
-    lines.push(`Resume in Gemini: ${resumeCommand}`);
+  if (resume) {
+    lines.push(`${resume.idLabel}: ${threadId}`);
+    lines.push(`${resume.resumeLabel}: ${resume.command}`);
   }
 
   if (job.summary) {

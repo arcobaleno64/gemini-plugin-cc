@@ -45,7 +45,7 @@ Only if `requestedEngine` is `agy`, AGY is unavailable
 - If the user chooses install, run:
 
 ```bash
-npm install -g agy
+curl -fsSL https://antigravity.google/cli/install.sh | bash
 ```
 
 - Then rerun:
@@ -71,3 +71,4 @@ Output rules:
 - Present the final setup output to the user.
 - If installation was skipped, present the original setup output.
 - If Gemini is installed but not authenticated, preserve the guidance to run `!gemini` once to complete OAuth authentication. The plugin authenticates by running `gemini`; there is no separate login subcommand.
+- If the setup output (`nextSteps` / `geminiPlanTier`) includes a 2026-06-18 EOL heads-up, surface it: personal-plan Gemini CLI free access ends then. After that date, either upgrade to Gemini Code Assist Standard/Enterprise to keep the gemini engine, or use `--engine agy` (the plugin recovers AGY responses from its on-disk transcript because `agy --print` does not pipe output — upstream google-gemini/gemini-cli#27466).

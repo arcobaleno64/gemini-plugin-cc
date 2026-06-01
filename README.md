@@ -28,8 +28,10 @@ Ported from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) 
 |---|---|---|
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
 | Gemini CLI | ≥ 0.40 | `npm install -g @google/gemini-cli` |
-| AGY _(optional)_ | ≥ 1.0 | `npm install -g agy` |
+| AGY _(optional)_ | 1.0.3 | _(see install note below)_ |
 | Claude Code | any | [claude.ai/code](https://claude.ai/code) |
+
+**Install AGY** (optional fallback): `curl -fsSL https://antigravity.google/cli/install.sh | bash`
 
 **Authentication**: Run `gemini` once to complete OAuth. No API key is required.
 

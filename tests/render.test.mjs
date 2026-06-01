@@ -103,10 +103,38 @@ test("renderStoredJobResult prefers the structured rendered review output", () =
 test("renderStoredJobResult falls back to result.gemini.stdout and appends the resume hint", () => {
   const out = renderStoredJobResult(
     { id: "task-2", status: "completed", title: "Task" },
-    { threadId: "sess-1", result: { gemini: { stdout: "RAW OUTPUT" } } }
+    { threadId: "sess-1", engine: "gemini", result: { gemini: { stdout: "RAW OUTPUT" } } }
   );
   assert.match(out, /RAW OUTPUT/);
-  assert.match(out, /Resume in Gemini: gemini resume sess-1/);
+  assert.match(out, /Gemini session ID: sess-1/);
+  assert.match(out, /Resume in Gemini: gemini --resume sess-1/);
+});
+
+test("renderStoredJobResult uses the AGY conversation resume hint for agy jobs", () => {
+  const out = renderStoredJobResult(
+    { id: "task-3", status: "completed", title: "Task" },
+    { threadId: "conv-abc", engine: "agy", result: { rawOutput: "AGY OUTPUT" } }
+  );
+  assert.match(out, /AGY OUTPUT/);
+  assert.match(out, /AGY conversation ID: conv-abc/);
+  assert.match(out, /Resume in AGY: agy --conversation conv-abc/);
+  assert.doesNotMatch(out, /gemini/i);
+});
+
+test("renderStoredJobResult defaults to the gemini resume hint when no engine is recorded", () => {
+  const out = renderStoredJobResult(
+    { id: "task-4", status: "completed", title: "Task" },
+    { threadId: "sess-2", result: { rawOutput: "OUT" } }
+  );
+  assert.match(out, /Resume in Gemini: gemini --resume sess-2/);
+});
+
+test("renderStoredJobResult reads engine from the index job when the stored file lacks it", () => {
+  const out = renderStoredJobResult(
+    { id: "task-5", status: "completed", title: "Task", engine: "agy", threadId: "conv-xyz" },
+    { result: { rawOutput: "OUT" } }
+  );
+  assert.match(out, /Resume in AGY: agy --conversation conv-xyz/);
 });
 
 test("renderStoredJobResult reports when no payload was stored", () => {

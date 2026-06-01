@@ -15,7 +15,8 @@ import {
   installUnavailableGemini,
   readFakeState,
   removeGeminiCredentials,
-  writeExpiredGeminiCredentials
+  writeExpiredGeminiCredentials,
+  writeGeminiSettings
 } from "./fake-gemini-fixture.mjs";
 import { initGitRepo, makeTempDir, run } from "./helpers.mjs";
 import {
@@ -136,6 +137,32 @@ test("setup reports not ready when neither gemini nor agy is available", () => {
   assert.equal(payload.ready, false);
   assert.equal(payload.gemini.available, false);
   assert.equal(payload.agy.available, false);
+});
+
+test("setup warns personal-plan users about the 2026-06-18 gemini CLI EOL", () => {
+  const binDir = makeTempDir();
+  installFakeGemini(binDir, "task"); // valid creds + gemini home
+  writeGeminiSettings(binDir, "oauth-personal");
+
+  const result = run("node", [SCRIPT, "setup", "--json"], { cwd: makeTempDir(), env: buildEnv(binDir) });
+
+  assert.equal(result.status, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.geminiPlanTier.tier, "personal");
+  assert.ok(payload.nextSteps.some((step) => /2026-06-18/.test(step)), "expected a 2026-06-18 EOL heads-up");
+});
+
+test("setup does not show the EOL warning for a non-personal (enterprise) plan", () => {
+  const binDir = makeTempDir();
+  installFakeGemini(binDir, "task");
+  writeGeminiSettings(binDir, "oauth-enterprise");
+
+  const result = run("node", [SCRIPT, "setup", "--json"], { cwd: makeTempDir(), env: buildEnv(binDir) });
+
+  assert.equal(result.status, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.geminiPlanTier.tier, "other");
+  assert.ok(!payload.nextSteps.some((step) => /2026-06-18/.test(step)), "enterprise plans must not get the EOL warning");
 });
 
 // Setup readiness must reflect the engine the user actually selected. With an
@@ -675,7 +702,7 @@ test("result returns the stored output and resume hint for the latest finished j
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Handled the requested task\./);
   assert.match(result.stdout, /Gemini session ID: thr_finished/);
-  assert.match(result.stdout, /Resume in Gemini: gemini resume thr_finished/);
+  assert.match(result.stdout, /Resume in Gemini: gemini --resume thr_finished/);
 });
 
 test("cancel stops an active job and marks it cancelled", async (t) => {
