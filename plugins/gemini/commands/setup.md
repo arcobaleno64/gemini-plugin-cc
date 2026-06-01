@@ -11,10 +11,13 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" setup --json $ARGUMENT
 ```
 
 Gemini CLI is the primary engine. AGY is an optional fallback that is only
-relevant when the user explicitly routes to it with `--engine agy`.
+relevant when the user routes to it with `--engine agy` (or `GEMINI_ENGINE=agy`).
+Drive the install decisions below off the setup JSON's `requestedEngine` field,
+which already resolves both the `--engine` flag and the `GEMINI_ENGINE`
+environment variable — do **not** branch on the raw `$ARGUMENTS` text.
 
 If the result says Gemini CLI is unavailable (`gemini.available` is false), npm
-is available, and the raw `$ARGUMENTS` do **not** include `--engine agy`:
+is available, and `requestedEngine` is **not** `agy`:
 - Use `AskUserQuestion` exactly once to ask whether Claude should install Gemini CLI now.
 - Put the install option first and suffix it with `(Recommended)`.
 - Use these two options:
@@ -32,7 +35,7 @@ npm install -g @google/gemini-cli
 node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" setup --json $ARGUMENTS
 ```
 
-Only if the raw `$ARGUMENTS` include `--engine agy`, AGY is unavailable
+Only if `requestedEngine` is `agy`, AGY is unavailable
 (`agy.available` is false), and npm is available:
 - Use `AskUserQuestion` exactly once to ask whether Claude should install AGY now.
 - Put the install option first and suffix it with `(Recommended)`.
@@ -53,15 +56,16 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" setup --json $ARGUMENT
 
 Do not ask about installation when:
 - Gemini CLI is already available (even if it still needs authentication) **and
-  the user did not pass `--engine agy`**, or
+  `requestedEngine` is not `agy`**, or
 - npm is unavailable, or
-- the only missing engine is AGY and the user did not pass `--engine agy`. In
-  that case Gemini is the default engine; mention AGY only as an optional
-  fallback, do not push its installation.
+- the only missing engine is AGY and `requestedEngine` is not `agy`. In that
+  case Gemini is the default engine; mention AGY only as an optional fallback,
+  do not push its installation.
 
-When the user passed `--engine agy` and AGY is unavailable, the AGY install
-prompt above takes precedence even if Gemini CLI is already present — the user
-explicitly asked to route to AGY, so do not silently fall back to Gemini.
+When `requestedEngine` is `agy` and AGY is unavailable, the AGY install prompt
+above takes precedence even if Gemini CLI is already present — the user routed
+to AGY (via `--engine agy` or `GEMINI_ENGINE=agy`), so do not silently fall back
+to Gemini.
 
 Output rules:
 - Present the final setup output to the user.

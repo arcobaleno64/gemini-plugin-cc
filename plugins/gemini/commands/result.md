@@ -8,8 +8,10 @@ allowed-tools: Bash(node:*)
 !`node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" result "$ARGUMENTS"`
 
 By default `result` only resolves jobs from the current Claude session (matching
-`/gemini:status`). Pass `--all` to look up a job that belongs to another session
-in this repository.
+`/gemini:status`) — never a job tagged to another session. When no session id is
+present (e.g. running the companion directly outside Claude Code), only
+session-agnostic untagged jobs are in scope. Pass `--all` to look up a job that
+belongs to another session in this repository.
 
 Present the full command output to the user. Do not summarize or condense it. Preserve all details including:
 - Job ID and status

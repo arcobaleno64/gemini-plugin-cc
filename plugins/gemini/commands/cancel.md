@@ -7,7 +7,8 @@ allowed-tools: Bash(node:*)
 
 !`node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" cancel "$ARGUMENTS"`
 
-By default `cancel` only targets jobs from the current Claude session, so it can
-never terminate another session's job (including the no-argument "cancel the one
-active job" shortcut). Pass `--all` to deliberately cancel a job from another
-session in this repository.
+By default `cancel` only targets jobs from the current Claude session — never a
+job tagged to another session, including via the no-argument "cancel the one
+active job" shortcut. When no session id is present (e.g. running the companion
+directly outside Claude Code), only session-agnostic untagged jobs are in scope.
+Pass `--all` to deliberately cancel a job from another session in this repository.
