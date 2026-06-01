@@ -176,10 +176,16 @@ function appendReasoningSection(lines, reasoningSummary) {
 }
 
 export function renderSetupReport(report) {
+  const statusLabel =
+    report.readyState === "partial"
+      ? "partial (AGY fallback only — Gemini CLI not ready)"
+      : report.ready
+        ? "ready"
+        : "needs attention";
   const lines = [
     "# Gemini Setup",
     "",
-    `Status: ${report.ready ? "ready" : "needs attention"}`,
+    `Status: ${statusLabel}`,
     "",
     "Checks:",
     `- node: ${report.node.detail}`,

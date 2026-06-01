@@ -8,10 +8,13 @@ import { fileURLToPath } from "node:url";
 import {
   buildEnv,
   buildEnvUnavailable,
+  installFakeAgy,
   installFakeGemini,
   installUnavailableEngines,
+  installUnavailableGemini,
   readFakeState,
-  removeGeminiCredentials
+  removeGeminiCredentials,
+  writeExpiredGeminiCredentials
 } from "./fake-gemini-fixture.mjs";
 import { initGitRepo, makeTempDir, run } from "./helpers.mjs";
 import {
@@ -72,7 +75,7 @@ test("setup reports ready when fake gemini is installed and authenticated", () =
   assert.equal(payload.geminiAuth.loggedIn, true);
 });
 
-test("setup flags missing gemini authentication while still reporting ready", () => {
+test("setup is not ready when gemini is installed but unauthenticated", () => {
   const binDir = makeTempDir();
   installFakeGemini(binDir, "task");
   removeGeminiCredentials(binDir);
@@ -81,9 +84,44 @@ test("setup flags missing gemini authentication while still reporting ready", ()
 
   assert.equal(result.status, 0, result.stderr);
   const payload = JSON.parse(result.stdout);
-  assert.equal(payload.ready, true);
+  // Core P0-3 contract: an unauthenticated gemini is never "ready". (readyState
+  // may be "partial" when a real AGY fallback happens to be on PATH, so it is
+  // asserted deterministically in the AGY-fallback test instead.)
+  assert.equal(payload.ready, false);
+  assert.equal(payload.gemini.available, true);
   assert.equal(payload.geminiAuth.loggedIn, false);
   assert.ok(payload.nextSteps.some((step) => /authenticate/i.test(step)));
+});
+
+test("setup is not ready when the gemini OAuth token is expired", () => {
+  const binDir = makeTempDir();
+  installFakeGemini(binDir, "task");
+  writeExpiredGeminiCredentials(binDir);
+
+  const result = run("node", [SCRIPT, "setup", "--json"], { cwd: makeTempDir(), env: buildEnv(binDir) });
+
+  assert.equal(result.status, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.ready, false);
+  assert.equal(payload.geminiAuth.loggedIn, false);
+  assert.match(payload.geminiAuth.detail, /expired/i);
+});
+
+test("setup reports a partial AGY fallback when gemini is unavailable but agy is present", () => {
+  const binDir = makeTempDir();
+  installUnavailableGemini(binDir);
+  installFakeAgy(binDir);
+
+  const result = run("node", [SCRIPT, "setup", "--json"], { cwd: makeTempDir(), env: buildEnvUnavailable(binDir) });
+
+  assert.equal(result.status, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.gemini.available, false);
+  assert.equal(payload.agy.available, true);
+  assert.equal(payload.ready, false);
+  assert.equal(payload.readyState, "partial");
+  assert.equal(payload.agyFallbackAvailable, true);
+  assert.ok(payload.nextSteps.some((step) => /--engine agy/.test(step)));
 });
 
 test("setup reports not ready when neither gemini nor agy is available", () => {
@@ -141,14 +179,75 @@ test("review renders a clean working-tree verdict from structured JSON", () => {
   assert.match(result.stdout, /No material findings\./);
 });
 
-test("review targets a base branch when --base is provided", () => {
+test("review honors --base over the dirty-tree auto default", () => {
   const { repo, binDir } = setupRepo("review-clean");
   commit(repo, "src/app.js", "export const value = 1;\n");
+  run("git", ["checkout", "-b", "feature"], { cwd: repo });
+  commit(repo, "src/feature.js", "export const f = 1;\n");
+  // Dirty the working tree so the auto scope would resolve to working-tree.
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = 2;\n");
 
   const result = run("node", [SCRIPT, "review", "--base", "main"], { cwd: repo, env: buildEnv(binDir) });
 
   assert.equal(result.status, 0, result.stderr);
+  // The fix must route --base through to the diff target; the original bug
+  // re-resolved with empty options and reported "working tree diff" instead.
   assert.match(result.stdout, /Target: branch diff against main/);
+  assert.doesNotMatch(result.stdout, /Target: working tree/);
+});
+
+test("review honors --scope working-tree even when the tree is clean", () => {
+  const { repo, binDir } = setupRepo("review-clean");
+  commit(repo, "src/app.js", "export const value = 1;\n");
+  // Clean tree: the auto scope would resolve to a branch diff, not working-tree.
+
+  const result = run("node", [SCRIPT, "review", "--scope", "working-tree"], { cwd: repo, env: buildEnv(binDir) });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Target: working tree diff/);
+});
+
+test("review honors --scope branch even when the tree is dirty", () => {
+  const { repo, binDir } = setupRepo("review-clean");
+  commit(repo, "src/app.js", "export const value = 1;\n");
+  // Dirty the tree: the auto scope would resolve to working-tree, not branch.
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = 2;\n");
+
+  const result = run("node", [SCRIPT, "review", "--scope", "branch"], { cwd: repo, env: buildEnv(binDir) });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Target: branch diff against main/);
+  assert.doesNotMatch(result.stdout, /Target: working tree/);
+});
+
+test("standard review ignores trailing focus text", () => {
+  const { repo, binDir } = setupRepo("review-clean");
+  commit(repo, "src/app.js", "export const value = 1;\n");
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = 2;\n");
+
+  const result = run("node", [SCRIPT, "review", "please", "focus", "on", "auth"], { cwd: repo, env: buildEnv(binDir) });
+
+  assert.equal(result.status, 0, result.stderr);
+  const state = readFakeState(binDir);
+  assert.doesNotMatch(state.lastInvocation.prompt, /please focus on auth/);
+});
+
+test("adversarial review keeps focus text out of flag parsing and forwards it", () => {
+  const { repo, binDir } = setupRepo("review-findings");
+  commit(repo, "src/app.js", "export const value = items[0];\n");
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = items[0].id;\n");
+
+  const result = run(
+    "node",
+    [SCRIPT, "adversarial-review", "--base", "main", "challenge", "the", "retry", "design"],
+    { cwd: repo, env: buildEnv(binDir) }
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  // --base must be parsed as a flag and the trailing words must become focus text.
+  assert.match(result.stdout, /Target: branch diff against main/);
+  const state = readFakeState(binDir);
+  assert.match(state.lastInvocation.prompt, /challenge the retry design/);
 });
 
 test("review forwards the default gemini model and JSON output flags", () => {

@@ -17,7 +17,6 @@ Core constraint:
 - Do not fix issues, apply patches, or suggest that you are about to make changes.
 - Your only job is to run the review and return Gemini's output verbatim to the user.
 - Keep the framing focused on whether the current approach is the right one, what assumptions it depends on, and where the design could fail under real-world conditions.
-- After presenting the review findings, STOP. You MUST explicitly ask the user which issues, if any, they want fixed before touching a single file.
 
 Execution mode rules:
 - If the raw arguments include `--wait`, do not ask. Run in the foreground.

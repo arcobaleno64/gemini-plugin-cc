@@ -154,16 +154,39 @@ function buildSetupReport(cwd, actionsTaken = []) {
   const agyAuth = getAgyLoginStatus();
   const config = getConfig(workspaceRoot) ?? {};
 
+  // Readiness mirrors upstream: the primary engine (gemini) must be installed
+  // AND authenticated. AGY auth cannot be verified non-interactively, so an
+  // AGY-only environment is reported as a "partial" fallback rather than fully
+  // ready — it can run via `--engine agy` but its auth state is unknown.
+  const geminiReady = geminiStatus.available && geminiAuth.loggedIn;
+  const agyFallbackAvailable = agyStatus.available;
+  const ready = nodeStatus.available && geminiReady;
+  const readyState = !nodeStatus.available
+    ? "not-ready"
+    : geminiReady
+      ? "ready"
+      : agyFallbackAvailable
+        ? "partial"
+        : "not-ready";
+
   const nextSteps = [];
   if (!geminiStatus.available && !agyStatus.available) {
-    nextSteps.push("Install gemini CLI: `npm install -g @google/gemini-cli` or install agy.");
+    nextSteps.push("Install Gemini CLI with `npm install -g @google/gemini-cli`.");
   }
   if (geminiStatus.available && !geminiAuth.loggedIn) {
     nextSteps.push("Run `gemini` once to authenticate via OAuth.");
   }
+  if (!geminiStatus.available && agyFallbackAvailable) {
+    nextSteps.push(
+      "Gemini CLI is unavailable; AGY is present as a fallback. Use `--engine agy` to route through it (its auth state cannot be verified), or install Gemini CLI with `npm install -g @google/gemini-cli` for the default engine."
+    );
+  }
 
   return {
-    ready: nodeStatus.available && (geminiStatus.available || agyStatus.available),
+    ready,
+    readyState,
+    geminiReady,
+    agyFallbackAvailable,
     node: nodeStatus,
     npm: npmStatus,
     gemini: geminiStatus,
@@ -244,7 +267,14 @@ async function resolveLatestTrackedTaskThread(cwd, options = {}) {
 async function executeReviewRun(request) {
   const reviewName = request.reviewName ?? "Adversarial Review";
   const templateName = request.templateName ?? "adversarial-review";
-  const context = collectReviewContext(request.cwd, resolveReviewTarget(request.cwd, {}));
+  // Resolve the review target from the caller's --base/--scope so the user's
+  // selection actually reaches the diff collection. (Re-resolving with empty
+  // options here would silently discard --base/--scope.)
+  const target = request.target ?? resolveReviewTarget(request.cwd, {
+    base: request.base,
+    scope: request.scope
+  });
+  const context = collectReviewContext(request.cwd, target);
   const template = loadPromptTemplate(ROOT_DIR, templateName);
   const prompt = interpolateTemplate(template, {
     TARGET_LABEL: context.target.label,
@@ -508,6 +538,9 @@ async function handleReviewCommand(argv, { reviewName, templateName, supportsFoc
     (progress) =>
       executeReviewRun({
         cwd,
+        target,
+        base: options.base,
+        scope: options.scope,
         model: options.model,
         engine: options.engine,
         focusText,
