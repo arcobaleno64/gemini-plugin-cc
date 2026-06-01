@@ -17,12 +17,16 @@ export function getCurrentSessionId(options = {}) {
 }
 
 // Restrict jobs to the current Claude session. When no session id is known
-// (e.g. the lifecycle hook never ran) this falls back to returning every job so
-// the workspace's latest thread is still reachable.
+// (e.g. the lifecycle hook never ran) we fail closed against cross-session
+// leakage: only session-agnostic jobs (no sessionId, e.g. legacy or direct-CLI
+// runs) stay reachable, while jobs tagged to some other Claude session are
+// hidden. This keeps the default scope honest — `--resume-last` can never
+// silently continue another session's thread, and status/result never expose
+// unrelated job output. Explicit `--all` remains the way to cross sessions.
 export function filterJobsForCurrentSession(jobs, options = {}) {
   const sessionId = getCurrentSessionId(options);
   if (!sessionId) {
-    return jobs;
+    return jobs.filter((job) => !job.sessionId);
   }
   return jobs.filter((job) => job.sessionId === sessionId);
 }

@@ -751,6 +751,37 @@ test("task-resume-candidate hides other-session threads by default", () => {
   assert.equal(payload.found, false);
 });
 
+// Fail closed: when no current session id is known (lifecycle hook never ran),
+// session-tagged jobs from other Claude sessions must NOT leak into the default
+// scope. Otherwise --resume-last could silently continue another session's
+// Gemini thread, and status/result could expose unrelated job output.
+test("task-resume-candidate fails closed when the session id is unset and jobs are session-tagged", () => {
+  const workspace = makeTempDir();
+  seedState(workspace, [
+    sessionJob("task-a", "sess-a", "2026-03-18T15:30:00.000Z"),
+    sessionJob("task-b", "sess-b", "2026-03-18T15:35:00.000Z")
+  ]);
+
+  const payload = JSON.parse(run("node", [SCRIPT, "task-resume-candidate", "--json"], { cwd: workspace, env: envWithoutSession() }).stdout);
+  assert.equal(payload.found, false);
+});
+
+test("status hides other-session jobs when the session id is unset (but --all still surfaces them)", () => {
+  const workspace = makeTempDir();
+  seedState(workspace, [
+    sessionJob("task-a", "sess-a", "2026-03-18T15:30:00.000Z"),
+    sessionJob("task-b", "sess-b", "2026-03-18T15:35:00.000Z")
+  ]);
+
+  const scoped = JSON.parse(run("node", [SCRIPT, "status", "--json"], { cwd: workspace, env: envWithoutSession() }).stdout);
+  const scopedIds = [scoped.latestFinished?.id, ...scoped.recent.map((job) => job.id)].filter(Boolean);
+  assert.deepEqual(scopedIds, []);
+
+  const all = JSON.parse(run("node", [SCRIPT, "status", "--all", "--json"], { cwd: workspace, env: envWithoutSession() }).stdout);
+  const allIds = [all.latestFinished?.id, ...all.recent.map((job) => job.id)].filter(Boolean).sort();
+  assert.deepEqual(allIds, ["task-a", "task-b"]);
+});
+
 // ---------------------------------------------------------------------------
 // P1-4: stdin prompt safety (gemini engine never puts the prompt in argv)
 // ---------------------------------------------------------------------------
