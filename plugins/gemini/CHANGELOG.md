@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased — parity audit
+
+### Breaking
+- **`/gemini:setup` readiness now requires authentication.** `ready` is `true` only when Node **and** the Gemini CLI are present **and** OAuth is valid. An installed-but-unauthenticated Gemini now reports `ready: false` (previously `true`). New JSON fields: `readyState` (`ready` | `partial` | `not-ready`), `geminiReady`, `agyFallbackAvailable`.
+
+### Fixed (P0)
+- **Review target was discarded.** `/gemini:review` and `/gemini:adversarial-review` now honour `--base <ref>` and `--scope <auto|working-tree|branch>`; `executeReviewRun` previously re-resolved the target with empty options, silently dropping the user's selection.
+- **Contradictory verbatim contract.** Removed the "STOP and ask which issues to fix" instruction from `review.md` / `adversarial-review.md`, which conflicted with the "return stdout verbatim" rule.
+- **AGY install was over-eager.** `setup.md` now installs Gemini CLI as the primary engine and only prompts for AGY when the user passes `--engine agy`. Auth guidance is unified on running `gemini` (there is no `gemini login` subcommand).
+
+### Added (P1)
+- **Claude session job filtering.** `/gemini:status --all` now crosses sessions (default stays scoped to the current Claude session); resume-candidate and active-task checks respect the session boundary.
+- **Single source of truth for models.** New `scripts/lib/model-map.mjs` holds aliases + effort tiers + provenance (`lastVerified`, `source`, preview flags); the README table is verified against it.
+- **Contract verification.** New `scripts/verify-contracts.mjs` (`npm run verify-contracts`) and ported `scripts/bump-version.mjs` (`npm run check-version` / `bump-version`). CI now runs `npm test`, `check-version`, and `verify-contracts`.
+- `getSessionRuntimeStatus` now returns a `label`/`mode` so setup/status no longer render `session runtime: undefined`.
+
+### Tests
+- 90 → 117 tests. New coverage: `--base`/`--scope` divergence, setup readiness (auth missing/expired/AGY-fallback), session filtering, stdin prompt safety (metacharacter matrix), stderr-does-not-pollute-JSON, model-map/README consistency, and contract/version verification.
+
+### Documentation
+- README (EN + zh-TW): Compatibility Matrix, Codex app server vs Gemini CLI adapter, expanded Security Notes, Setup & Auth Troubleshooting, Model Alias Notes, and Upstream Attribution.
+
 ## 0.5.0 — 2026-05-27
 
 ### Added

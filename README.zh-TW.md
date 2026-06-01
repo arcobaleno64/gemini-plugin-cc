@@ -166,6 +166,13 @@
 | `lite` / `fast` | `gemini-2.5-flash-lite` | 高效低成本（GA） |
 | `lite3` | `gemini-3.1-flash-lite-preview` | Gemini 3.1 低成本版（preview） |
 
+### 模型別名說明
+
+- 別名與努力等級集中於單一來源——`plugins/gemini/scripts/lib/model-map.mjs`——且 `npm test` 會以其驗證上表，二者不致漂移。
+- **努力對映**（於提供 `--effort` 但未給 `--model` 時套用）：`none`/`minimal` → `gemini-2.5-flash-lite`；`low`/`medium` → `gemini-3-flash-preview`；`high`/`xhigh` → `gemini-3.1-pro-preview`。
+- **Preview ID 可能變動。** 以 `-preview` 結尾之 model ID 追隨 Google 的 preview channel（最後驗證於 gemini CLI 0.44.1）。若某別名無法解析，以 `--model <精確 ID>` 覆蓋——任何非已知別名之值將原樣透傳給 CLI。
+- **AGY 忽略 `--model` 與 `--effort`。** AGY 之模型與推理分級由其互動選擇；`--engine agy` 時外掛會印出提示並忽略此二旗標。
+
 ---
 
 ## 引擎路由
@@ -184,8 +191,25 @@
 ## 安全性
 
 - **Stdin 傳遞（gemini 引擎）**：`gemini` 引擎之提示透過 stdin（Node.js `spawnSync` 的 `input` 選項）傳遞、從不插入 shell 命令字串，故無論內容為何皆無 shell injection 風險。`agy` 引擎無 stdin 模式，提示以 CLI 引數傳入；處理不可信輸入時請優先使用預設之 `gemini` 引擎。
+- **Windows `.cmd` wrapper**：npm 將 `gemini`／`agy` 安裝為 `.cmd` shim，需 `shell: true` 方能啟動。因 gemini 提示走 stdin（從不進 argv），`shell: true` 永不將其暴露給 `cmd.exe` 解析——argv 中僅有受控旗標（model id、`--yolo` 等）。
+- **AGY positional 提示**：AGY 無 stdin 模式，故 `--engine agy` 時提示以 positional CLI 引數傳入，於 Windows 受 `cmd.exe` 引號規則影響。**請勿將不可信提示內容經 `--engine agy` 傳遞**——應優先使用預設之 `gemini` 引擎。
 - **憑證處理**：`~/.gemini/oauth_creds.json` 之 OAuth 憑證僅用於 `getGeminiLoginStatus()` 檢查 token 是否過期；本外掛從不記錄、複製或傳輸之。
 - **`.gitignore`**：`.omc/` 狀態目錄（工作日誌、會話狀態）已排除於版本控制之外。
+
+---
+
+## 安裝與認證疑難排解
+
+| 症狀 | 原因 | 解法 |
+|---|---|---|
+| `gemini: not found` | 未安裝 Gemini CLI | `npm install -g @google/gemini-cli`，或執行 `/gemini:setup` 接受安裝提示 |
+| `npm: not found` | PATH 中缺 Node/npm | 自 [nodejs.org](https://nodejs.org) 安裝 Node.js ≥ 18 |
+| setup 顯示 `gemini auth: No credentials …` | 未完成 OAuth | 執行一次 `!gemini` 並完成瀏覽器登入 |
+| setup 顯示 `… token expired` | OAuth token 已過期 | 再次執行 `!gemini` 以更新憑證 |
+| `Status: partial (AGY fallback only …)` | Gemini CLI 不可用但 AGY 存在 | 安裝 Gemini CLI，或使用 `--engine agy`（其認證無法驗證） |
+| Windows：命令可解析但執行失敗 | `.cmd` wrapper／PATH | 確認 `where gemini` 可解析；外掛以 `shell: true` 啟動裸命令名以尋得 `.cmd` shim |
+
+如需認證，執行一次 **`!gemini`**——外掛即以呼叫 `gemini` 自身完成 OAuth。**並無** `gemini login` 子命令。唯有 Node **且** Gemini CLI 皆存在**且** OAuth 有效時，`setup` 方回報 `ready: true`；已安裝但未認證之 Gemini 將回報為 *not ready*。
 
 ---
 
@@ -207,6 +231,31 @@ Claude Code
 
 ---
 
+## 與 codex-plugin-cc 的對應
+
+本外掛為 [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) 的高保真移植版。公開的斜線命令介面、背景工作模型，以及 state/result/status/cancel 流程皆鏡像上游；執行後端則改用 Gemini CLI（並以 AGY 為備援），而非 Codex app server。
+
+### 相容性對照表
+
+| 上游（Codex） | 本外掛（Gemini） | 對應程度 |
+|---|---|---|
+| `/codex:setup` | `/gemini:setup` | **Gemini 專屬差異** — 檢查 `gemini` OAuth 與選用之 AGY 備援，而非 Codex 認證 |
+| `/codex:review` | `/gemini:review` | **最佳等效** — prompt／CLI adapter 審查，非原生審查器 |
+| `/codex:adversarial-review` | `/gemini:adversarial-review` | **最佳等效** — 對同一 diff target 施以對抗性 prompt |
+| `/codex:rescue` | `/gemini:rescue` | **1:1 對等** — 相同的 forwarder／subagent 合約與旗標 |
+| `/codex:status` | `/gemini:status` | **1:1 對等** — 相同工作模型；`--all` 跨 Claude session |
+| `/codex:result` | `/gemini:result` | **Gemini 專屬差異** — 顯示 Gemini session id 與 `gemini resume` |
+| `/codex:cancel` | `/gemini:cancel` | **1:1 對等** — 相同的 process-tree 終止（POSIX 與 Windows） |
+
+### Codex app server 與 Gemini CLI adapter
+
+- **執行時**：Codex 使用常駐 app-server，具原生審查與持久 thread。本外掛則於*每次命令*直接呼叫 Gemini CLI（無共享執行時）；AGY 為選用備援。
+- **標準審查**：Codex 外掛之 `/codex:review` 為*原生*審查器；本外掛之 `/gemini:review` 為 **prompt／CLI adapter 等效實作**——將 diff 連同務實審查 prompt 送交 Gemini 並解析回傳之結構化 JSON，並非原生 Gemini 審查器。
+- **沙箱**：Codex 提供 `read-only`／`workspace-write` 沙箱。Gemini 無對應沙箱；寫入權由 `--write`（`--yolo`）把關，否則以 prompt 強制唯讀紀律。（不採 `--approval-mode plan`：其需 TTY，與 stdin 提示傳遞衝突。）
+- **Thread／session 接續**：Codex 於 app-server 持久化 thread。本外掛之接續依賴自 JSON 信封擷取之 Gemini CLI **session id**；`/gemini:result` 會印出 `gemini resume <session-id>`，而 `--resume-last` 接續*當前 Claude session* 之最新 thread。
+
+---
+
 ## 技能
 
 本外掛捆綁三個供 Claude Code 使用的技能：
@@ -225,8 +274,12 @@ Claude Code
 
 ---
 
-## 授權
+## 授權與上游歸屬
 
 MIT © 2026 arcobaleno64。
 
 本專案為 [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)（Copyright 2026 OpenAI，Apache License 2.0）之衍生作品。沿用部分仍受 Apache-2.0 規範（見 [`LICENSE-APACHE-2.0`](LICENSE-APACHE-2.0) 與 [`NOTICE`](NOTICE)）；Gemini/AGY 專屬之變更採 MIT（見 [`LICENSE`](LICENSE)）。
+
+**衍生自上游**（沿用，Apache-2.0）：斜線命令結構、背景工作模型（enqueue／worker／status／result／cancel）、`.omc/state` 持久化與 job-control 模式、停止時 review-gate 模式、skill 合約佈局，以及 version／manifest 工具（`bump-version`）。
+
+**本倉儲原創**（MIT）：Gemini/AGY 引擎偵測與路由、stdin 提示傳遞、`model-map` 別名／努力來源、AGY 備援處理、OAuth 狀態檢查，以及 contract 驗證腳本。

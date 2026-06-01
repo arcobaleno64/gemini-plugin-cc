@@ -5,12 +5,20 @@ This product is a derivative work of openai/codex-plugin-cc
 (https://github.com/openai/codex-plugin-cc), Copyright 2026 OpenAI,
 licensed under the Apache License, Version 2.0.
 
-Portions of this software (its repository structure, runtime orchestration,
-command and skill contracts, and companion scripts) are adapted from that
-project and remain subject to the Apache License, Version 2.0; a copy is
-provided in LICENSE-APACHE-2.0. These files have been modified from the
-originals.
+Portions of this software are adapted from that project and remain subject to
+the Apache License, Version 2.0; a copy is provided in LICENSE-APACHE-2.0.
+These files have been modified from the originals. The adapted architecture
+includes, in particular:
 
-Gemini/AGY-specific modifications and additions are
-Copyright (c) 2026 arcobaleno64 and are distributed under the MIT License
-(see LICENSE).
+  * the slash-command structure and command markdown contracts;
+  * the background job model (enqueue / worker / status / result / cancel);
+  * the .omc/state persistence layout and job-control patterns;
+  * the stop-time review-gate pattern;
+  * the skill contract layout (runtime / prompting / result-handling); and
+  * the version/manifest tooling (bump-version / check-version).
+
+Gemini/AGY-specific modifications and additions — including engine detection
+and routing, stdin prompt delivery, the model-map alias/effort source, AGY
+fallback handling, OAuth status checks, and the contract-verification script —
+are Copyright (c) 2026 arcobaleno64 and are distributed under the MIT License
+(see LICENSE). They are original work and are not part of the upstream project.

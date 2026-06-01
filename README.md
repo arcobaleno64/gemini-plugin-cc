@@ -168,6 +168,13 @@ When enabled and the review returns `needs-attention`, Claude Code is blocked fr
 | `lite` / `fast` | `gemini-2.5-flash-lite` | Cost-efficient (GA) |
 | `lite3` | `gemini-3.1-flash-lite-preview` | Gemini 3.1 cost-efficient (preview) |
 
+### Model Alias Notes
+
+- Aliases and effort tiers live in a single source of truth — `plugins/gemini/scripts/lib/model-map.mjs` — and `npm test` verifies the table above against it, so the two cannot drift.
+- **Effort mapping** (applied when `--effort` is given without `--model`): `none`/`minimal` → `gemini-2.5-flash-lite`; `low`/`medium` → `gemini-3-flash-preview`; `high`/`xhigh` → `gemini-3.1-pro-preview`.
+- **Preview IDs may change.** Model IDs ending in `-preview` track Google's preview channel (last verified against gemini CLI 0.44.1). If an alias stops resolving, override it with `--model <exact-id>` — any value that is not a known alias is passed through to the CLI unchanged.
+- **AGY ignores `--model` and `--effort`.** AGY selects its model and reasoning tier interactively; the plugin prints a note and ignores both flags when `--engine agy` is active.
+
 ---
 
 ## Engine Routing
@@ -186,8 +193,25 @@ Override via `--engine` flag or the `GEMINI_ENGINE` environment variable.
 ## Security
 
 - **Stdin delivery (gemini engine)**: For the `gemini` engine, prompts are passed via `stdin` (Node's `spawnSync` `input` option) and never interpolated into a shell string, eliminating shell-injection risk regardless of prompt content. The `agy` engine has no stdin mode and receives the prompt as a CLI argument, so prefer the default `gemini` engine for untrusted input.
+- **Windows `.cmd` wrappers**: npm installs `gemini`/`agy` as `.cmd` shims, which require `shell: true` to launch. Because the gemini prompt travels on stdin (never in argv), `shell: true` never exposes it to `cmd.exe` parsing — only controlled flags (model id, `--yolo`, …) are ever placed in argv.
+- **AGY positional prompt**: AGY has no stdin mode, so under `--engine agy` the prompt is passed as a positional CLI argument and, on Windows, is subject to `cmd.exe` quoting. **Do not route untrusted prompt content through `--engine agy`** — prefer the default `gemini` engine.
 - **Credential handling**: OAuth credentials in `~/.gemini/oauth_creds.json` are read only to check token expiry via `getGeminiLoginStatus()`; they are never logged, copied elsewhere, or transmitted by this plugin.
 - **`.gitignore`**: The `.omc/` state directory (job logs, session state) is excluded from version control.
+
+---
+
+## Setup & Auth Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `gemini: not found` | Gemini CLI not installed | `npm install -g @google/gemini-cli`, or run `/gemini:setup` and accept the install prompt |
+| `npm: not found` | Node/npm missing from PATH | Install Node.js ≥ 18 from [nodejs.org](https://nodejs.org) |
+| setup shows `gemini auth: No credentials …` | OAuth not completed | Run `!gemini` once and complete the browser login |
+| setup shows `… token expired` | OAuth token lapsed | Run `!gemini` again to refresh credentials |
+| `Status: partial (AGY fallback only …)` | Gemini CLI unavailable but AGY present | Install Gemini CLI, or use `--engine agy` (its auth cannot be verified) |
+| Windows: command resolves but fails | `.cmd` wrapper / PATH | Confirm `where gemini` resolves; the plugin spawns bare names through `shell: true` to find `.cmd` shims |
+
+To authenticate, run **`!gemini`** once — the plugin completes OAuth by invoking `gemini` itself. There is **no** `gemini login` subcommand. `setup` reports `ready: true` only when Node **and** the Gemini CLI are present **and** OAuth is valid; an installed-but-unauthenticated Gemini is reported as *not ready*.
 
 ---
 
@@ -209,6 +233,31 @@ Background mode spawns a detached `task-worker` child process and returns a job 
 
 ---
 
+## Parity with codex-plugin-cc
+
+This plugin is a high-fidelity port of [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc). The public slash-command surface, background job model, and state/result/status/cancel flow mirror the upstream; the execution backend is the Gemini CLI (with an AGY fallback) rather than the Codex app server.
+
+### Compatibility Matrix
+
+| Upstream (Codex) | This plugin (Gemini) | Parity |
+|---|---|---|
+| `/codex:setup` | `/gemini:setup` | **Gemini-specific divergence** — checks `gemini` OAuth + optional AGY fallback instead of Codex auth |
+| `/codex:review` | `/gemini:review` | **best-effort equivalent** — prompt / CLI-adapter review, not a native reviewer |
+| `/codex:adversarial-review` | `/gemini:adversarial-review` | **best-effort equivalent** — adversarial prompt over the same diff target |
+| `/codex:rescue` | `/gemini:rescue` | **1:1 parity** — same forwarder/subagent contract and flags |
+| `/codex:status` | `/gemini:status` | **1:1 parity** — same job model; `--all` crosses Claude sessions |
+| `/codex:result` | `/gemini:result` | **Gemini-specific divergence** — surfaces the Gemini session id + `gemini resume` |
+| `/codex:cancel` | `/gemini:cancel` | **1:1 parity** — same process-tree termination (POSIX + Windows) |
+
+### Codex app server vs Gemini CLI adapter
+
+- **Runtime**: Codex uses a persistent app-server with native review and persistent threads. This plugin invokes the Gemini CLI directly *per command* (no shared runtime); AGY is an optional fallback.
+- **Standard review**: In the Codex plugin, `/codex:review` is a *native* reviewer. Here, `/gemini:review` is a **prompt-based / CLI-adapter equivalent** — it sends the diff to Gemini with a pragmatic-review prompt and parses structured JSON back. It is not a native Gemini reviewer.
+- **Sandbox**: Codex exposes `read-only` / `workspace-write` sandboxes. Gemini has no equivalent; write access is gated by `--write` (`--yolo`), and otherwise the prompt enforces read-only discipline. (`--approval-mode plan` is intentionally not used: it requires a TTY and conflicts with stdin prompt delivery.)
+- **Thread/session resume**: Codex persists threads on the app server. Here, resume relies on the Gemini CLI **session id** captured from the JSON envelope; `/gemini:result` prints `gemini resume <session-id>`, and `--resume-last` continues the latest thread *for the current Claude session*.
+
+---
+
 ## Skills
 
 Three skills are bundled for Claude Code to consume:
@@ -227,8 +276,12 @@ See [CHANGELOG.md](plugins/gemini/CHANGELOG.md).
 
 ---
 
-## License
+## License & Upstream Attribution
 
 MIT © 2026 arcobaleno64.
 
 This project is a derivative work of [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc), Copyright 2026 OpenAI, licensed under the Apache License, Version 2.0. Adapted portions remain under Apache-2.0 (see [`LICENSE-APACHE-2.0`](LICENSE-APACHE-2.0) and [`NOTICE`](NOTICE)); Gemini/AGY-specific changes are MIT (see [`LICENSE`](LICENSE)).
+
+**Derived from upstream** (adapted, Apache-2.0): the slash-command structure, the background job model (enqueue / worker / status / result / cancel), the `.omc/state` persistence and job-control patterns, the stop-time review-gate pattern, the skill contract layout, and the version/manifest tooling (`bump-version`).
+
+**Original to this repository** (MIT): the Gemini/AGY engine detection and routing, stdin prompt delivery, the `model-map` alias/effort source, the AGY fallback handling, OAuth status checks, and the contract-verification script.
