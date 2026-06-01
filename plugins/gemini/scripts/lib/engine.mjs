@@ -19,8 +19,10 @@ export function mapEffortToModel(effort) {
 // shell:true (see process.mjs), so a metacharacter-laden value could be
 // reinterpreted by cmd.exe. The prompt is already hardened via stdin; constrain
 // the model id to a safe charset so it can never smuggle a shell payload into
-// argv. Every real Gemini model id / alias fits this pattern.
-const SAFE_MODEL_ID = /^[A-Za-z0-9._-]+$/;
+// argv. The id must also START with an alphanumeric so a value like `--yolo`
+// can never be mistaken for a CLI flag by the gemini binary's own arg parser.
+// Every real Gemini model id / alias fits this pattern.
+const SAFE_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export function normalizeRequestedModel(model) {
   if (model == null) return null;

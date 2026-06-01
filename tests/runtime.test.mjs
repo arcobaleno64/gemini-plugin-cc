@@ -160,6 +160,28 @@ test("setup --engine agy is not ready when agy is unavailable even if gemini is 
   assert.ok(payload.nextSteps.some((step) => /agy/i.test(step)));
 });
 
+// Even when the AGY binary IS present, `--engine agy` must not report full
+// readiness: AGY's auth cannot be verified non-interactively, so the verdict is
+// "partial" (binary present, auth unknown) and `ready` stays false.
+test("setup --engine agy is partial, never fully ready, when agy is present but unverifiable", () => {
+  const binDir = makeTempDir();
+  installFakeGemini(binDir, "task"); // gemini installed + authenticated
+  installFakeAgy(binDir); // agy binary answers --version
+
+  const result = run("node", [SCRIPT, "setup", "--json", "--engine", "agy"], {
+    cwd: makeTempDir(),
+    env: buildEnv(binDir)
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.requestedEngine, "agy");
+  assert.equal(payload.agy.available, true);
+  assert.equal(payload.ready, false);
+  assert.equal(payload.readyState, "partial");
+  assert.ok(payload.nextSteps.some((step) => /cannot be verified|authentication/i.test(step)));
+});
+
 test("setup toggles the stop-time review gate and persists the choice", () => {
   const binDir = makeTempDir();
   installFakeGemini(binDir, "task");
@@ -648,7 +670,7 @@ test("cancel stops an active job and marks it cancelled", async (t) => {
     pid: sleeper.pid
   });
 
-  const result = run("node", [SCRIPT, "cancel", "task-live", "--json"], { cwd: workspace });
+  const result = run("node", [SCRIPT, "cancel", "task-live", "--json"], { cwd: workspace, env: envWithoutSession() });
 
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).status, "cancelled");
@@ -805,6 +827,59 @@ test("status hides other-session jobs when the session id is unset (but --all st
   assert.deepEqual(allIds, ["task-a", "task-b"]);
 });
 
+// result/cancel must honor the same default session scope as status, so an
+// explicit id can never reach — or act on — another Claude session's job
+// without an explicit --all.
+test("result is scoped to the current session and needs --all to read another session's job", () => {
+  const workspace = makeTempDir();
+  seedState(workspace, [sessionJob("task-other", "sess-other", "2026-03-18T15:35:00.000Z")]);
+  writeJobFile(workspace, "task-other", {
+    id: "task-other",
+    status: "completed",
+    title: "Gemini Task",
+    threadId: "thr_task-other",
+    result: { rawOutput: "Other session output." }
+  });
+  const env = { ...process.env, GEMINI_COMPANION_SESSION_ID: "sess-current" };
+
+  const blocked = run("node", [SCRIPT, "result", "task-other"], { cwd: workspace, env });
+  assert.notEqual(blocked.status, 0);
+  assert.match(blocked.stderr, /No job found/i);
+
+  const crossed = run("node", [SCRIPT, "result", "task-other", "--all"], { cwd: workspace, env });
+  assert.equal(crossed.status, 0, crossed.stderr);
+  assert.match(crossed.stdout, /Other session output\./);
+});
+
+test("cancel is scoped to the current session and will not target another session's job", () => {
+  const workspace = makeTempDir();
+  seedState(workspace, [
+    {
+      id: "task-other",
+      status: "running",
+      jobClass: "task",
+      kindLabel: "rescue",
+      title: "Gemini Task",
+      sessionId: "sess-other",
+      summary: "Other session task",
+      createdAt: "2026-03-18T15:30:00.000Z",
+      updatedAt: "2026-03-18T15:30:00.000Z"
+    }
+  ]);
+  const env = { ...process.env, GEMINI_COMPANION_SESSION_ID: "sess-current" };
+
+  // By id: the job belongs to another session, so it is not a candidate.
+  const byId = run("node", [SCRIPT, "cancel", "task-other"], { cwd: workspace, env });
+  assert.notEqual(byId.status, 0);
+  assert.match(byId.stderr, /No job found/i);
+
+  // No id: the only active job belongs to another session, so there is nothing
+  // in scope to cancel (it must NOT silently grab the other session's job).
+  const noId = run("node", [SCRIPT, "cancel"], { cwd: workspace, env });
+  assert.notEqual(noId.status, 0);
+  assert.match(noId.stderr, /No active Gemini jobs to cancel/i);
+});
+
 // ---------------------------------------------------------------------------
 // P1-4: stdin prompt safety (gemini engine never puts the prompt in argv)
 // ---------------------------------------------------------------------------
@@ -856,6 +931,19 @@ test("gemini engine rejects a shell-metacharacter --model and never reaches argv
     const args = readFakeState(binDir).lastInvocation?.args ?? [];
     assert.ok(!args.some((arg) => String(arg).includes("PWNED")), "payload must never reach gemini argv");
   }
+});
+
+// A flag-like model id (leading hyphen) must also be rejected: passed as the
+// value of `-m`, a string like `--yolo` could otherwise be re-parsed by the
+// gemini binary as a separate flag (e.g. enabling write mode).
+test("gemini engine rejects a flag-like --model that could inject a CLI flag", () => {
+  const { repo, binDir } = setupRepo("task");
+  commit(repo, "README.md", "hello\n");
+
+  const result = run(process.execPath, [SCRIPT, "task", "--model", "--yolo", "diagnose"], { cwd: repo, env: buildEnv(binDir) });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Invalid model id/i);
 });
 
 // ---------------------------------------------------------------------------

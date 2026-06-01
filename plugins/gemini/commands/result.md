@@ -1,11 +1,15 @@
 ---
 description: Show the stored final output for a finished Gemini job in this repository
-argument-hint: '[job-id]'
+argument-hint: '[job-id] [--all]'
 disable-model-invocation: true
 allowed-tools: Bash(node:*)
 ---
 
 !`node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" result "$ARGUMENTS"`
+
+By default `result` only resolves jobs from the current Claude session (matching
+`/gemini:status`). Pass `--all` to look up a job that belongs to another session
+in this repository.
 
 Present the full command output to the user. Do not summarize or condense it. Preserve all details including:
 - Job ID and status

@@ -263,9 +263,13 @@ export function buildSingleJobSnapshot(cwd, reference, options = {}) {
   };
 }
 
-export function resolveResultJob(cwd, reference) {
+export function resolveResultJob(cwd, reference, options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
-  const jobs = sortJobsNewestFirst(reference ? listJobs(workspaceRoot) : filterJobsForCurrentSession(listJobs(workspaceRoot)));
+  // Default scope is the current Claude session (consistent with /gemini:status)
+  // so an explicit id/prefix can never reach another session's job. Pass
+  // { all: true } to resolve across every session in the workspace.
+  const candidates = options.all ? listJobs(workspaceRoot) : filterJobsForCurrentSession(listJobs(workspaceRoot));
+  const jobs = sortJobsNewestFirst(candidates);
   const selected = matchJobReference(
     jobs,
     reference,
@@ -288,9 +292,14 @@ export function resolveResultJob(cwd, reference) {
   throw new Error("No finished Gemini jobs found for this repository yet.");
 }
 
-export function resolveCancelableJob(cwd, reference) {
+export function resolveCancelableJob(cwd, reference, options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
-  const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
+  // Default scope is the current Claude session so /gemini:cancel can never
+  // terminate another session's (or another project's) job — neither by id nor
+  // via the no-argument "single active job" shortcut. Pass { all: true } to
+  // deliberately cross sessions.
+  const scoped = options.all ? listJobs(workspaceRoot) : filterJobsForCurrentSession(listJobs(workspaceRoot));
+  const jobs = sortJobsNewestFirst(scoped);
   const activeJobs = jobs.filter((job) => job.status === "queued" || job.status === "running");
 
   if (reference) {

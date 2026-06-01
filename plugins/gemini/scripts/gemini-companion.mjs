@@ -165,9 +165,11 @@ function buildSetupReport(cwd, actionsTaken = [], options = {}) {
   const agySelected = requestedEngine === "agy";
   const geminiReady = geminiStatus.available && geminiAuth.loggedIn;
   const agyFallbackAvailable = agyStatus.available;
-  const ready = agySelected
-    ? nodeStatus.available && agyStatus.available
-    : nodeStatus.available && geminiReady;
+  // AGY auth cannot be verified non-interactively, so `--engine agy` is never
+  // reported as fully `ready` — the most it reaches is `readyState: "partial"`
+  // (binary present, auth unknown). `ready:true` is reserved for a verified
+  // runtime: an installed AND authenticated Gemini CLI.
+  const ready = !agySelected && nodeStatus.available && geminiReady;
   const readyState = !nodeStatus.available
     ? "not-ready"
     : agySelected
@@ -184,6 +186,11 @@ function buildSetupReport(cwd, actionsTaken = [], options = {}) {
   if (agySelected && !agyStatus.available) {
     nextSteps.push(
       "AGY was requested via `--engine agy` but is not installed. Install it with `npm install -g agy`, or drop `--engine agy` to use the default Gemini CLI."
+    );
+  }
+  if (agySelected && agyStatus.available) {
+    nextSteps.push(
+      "AGY is installed, but its authentication state cannot be verified non-interactively. Run an `--engine agy` command to confirm it is logged in."
     );
   }
   if (!geminiStatus.available && !agyStatus.available) {
@@ -721,12 +728,12 @@ async function handleStatus(argv) {
 function handleResult(argv) {
   const { options, positionals } = parseCommandInput(argv, {
     valueOptions: ["cwd"],
-    booleanOptions: ["json"]
+    booleanOptions: ["json", "all"]
   });
 
   const cwd = resolveCommandCwd(options);
   const reference = positionals[0] ?? "";
-  const { workspaceRoot, job } = resolveResultJob(cwd, reference);
+  const { workspaceRoot, job } = resolveResultJob(cwd, reference, { all: options.all });
   const storedJob = readStoredJob(workspaceRoot, job.id);
   const payload = { job, storedJob };
 
@@ -764,12 +771,12 @@ async function handleTaskResumeCandidate(argv) {
 async function handleCancel(argv) {
   const { options, positionals } = parseCommandInput(argv, {
     valueOptions: ["cwd"],
-    booleanOptions: ["json"]
+    booleanOptions: ["json", "all"]
   });
 
   const cwd = resolveCommandCwd(options);
   const reference = positionals[0] ?? "";
-  const { workspaceRoot, job } = resolveCancelableJob(cwd, reference);
+  const { workspaceRoot, job } = resolveCancelableJob(cwd, reference, { all: options.all });
   const existing = readStoredJob(workspaceRoot, job.id) ?? {};
 
   terminateProcessTree(job.pid ?? Number.NaN);
