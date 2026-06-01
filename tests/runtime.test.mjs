@@ -182,6 +182,34 @@ test("setup --engine agy is partial, never fully ready, when agy is present but 
   assert.ok(payload.nextSteps.some((step) => /cannot be verified|authentication/i.test(step)));
 });
 
+// The human-readable (non-JSON) setup label must not claim "Gemini CLI not
+// ready" for an `--engine agy` partial: there, partial means AGY auth is
+// unverifiable, not that Gemini is missing.
+test("non-JSON setup --engine agy does not claim Gemini is not ready when it is", () => {
+  const binDir = makeTempDir();
+  installFakeGemini(binDir, "task"); // gemini installed + authenticated
+  installFakeAgy(binDir); // agy binary present
+
+  const result = run("node", [SCRIPT, "setup", "--engine", "agy"], { cwd: makeTempDir(), env: buildEnv(binDir) });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /Gemini CLI not ready/);
+  assert.match(result.stdout, /AGY selected|auth not verifiable/i);
+});
+
+// The default-engine partial (Gemini genuinely unavailable, AGY present) must
+// still render the AGY-fallback label.
+test("non-JSON setup keeps the AGY-fallback partial label when gemini is unavailable", () => {
+  const binDir = makeTempDir();
+  installUnavailableGemini(binDir);
+  installFakeAgy(binDir);
+
+  const result = run("node", [SCRIPT, "setup"], { cwd: makeTempDir(), env: buildEnvUnavailable(binDir) });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /AGY fallback only — Gemini CLI not ready/);
+});
+
 test("setup toggles the stop-time review gate and persists the choice", () => {
   const binDir = makeTempDir();
   installFakeGemini(binDir, "task");

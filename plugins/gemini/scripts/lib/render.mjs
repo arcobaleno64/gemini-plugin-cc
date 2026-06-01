@@ -178,7 +178,9 @@ function appendReasoningSection(lines, reasoningSummary) {
 export function renderSetupReport(report) {
   const statusLabel =
     report.readyState === "partial"
-      ? "partial (AGY fallback only — Gemini CLI not ready)"
+      ? report.requestedEngine === "agy"
+        ? "partial (AGY selected — binary present, auth not verifiable non-interactively)"
+        : "partial (AGY fallback only — Gemini CLI not ready)"
       : report.ready
         ? "ready"
         : "needs attention";
