@@ -7,7 +7,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { parseArgs, splitRawArgumentString } from "./lib/args.mjs";
-import { detectEngine, normalizeRequestedModel, VALID_EFFORT_LEVELS } from "./lib/engine.mjs";
+import { detectEngine, ENGINE_ENV, normalizeRequestedModel, VALID_EFFORT_LEVELS } from "./lib/engine.mjs";
 import { collectReviewContext, ensureGitRepository, resolveReviewTarget } from "./lib/git.mjs";
 import { readStdinIfPiped } from "./lib/fs.mjs";
 import { binaryAvailable, terminateProcessTree } from "./lib/process.mjs";
@@ -145,7 +145,7 @@ function firstMeaningfulLine(text, fallback) {
   return line ?? fallback;
 }
 
-function buildSetupReport(cwd, actionsTaken = []) {
+function buildSetupReport(cwd, actionsTaken = [], options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const nodeStatus = binaryAvailable("node", ["--version"], { cwd });
   const npmStatus = binaryAvailable("npm", ["--version"], { cwd });
@@ -155,29 +155,44 @@ function buildSetupReport(cwd, actionsTaken = []) {
   const agyAuth = getAgyLoginStatus();
   const config = getConfig(workspaceRoot) ?? {};
 
-  // Readiness mirrors upstream: the primary engine (gemini) must be installed
-  // AND authenticated. AGY auth cannot be verified non-interactively, so an
-  // AGY-only environment is reported as a "partial" fallback rather than fully
-  // ready — it can run via `--engine agy` but its auth state is unknown.
+  // Readiness is computed for the engine the user actually selected (via
+  // `--engine` or GEMINI_ENGINE). The default/gemini path mirrors upstream: the
+  // primary engine must be installed AND authenticated. Explicit `--engine agy`
+  // must NOT inherit Gemini's ready state — it depends on the AGY binary (whose
+  // auth cannot be verified non-interactively), so AGY-present is "partial" and
+  // AGY-missing is "not-ready".
+  const requestedEngine = String(options.engine ?? "").trim().toLowerCase();
+  const agySelected = requestedEngine === "agy";
   const geminiReady = geminiStatus.available && geminiAuth.loggedIn;
   const agyFallbackAvailable = agyStatus.available;
-  const ready = nodeStatus.available && geminiReady;
+  const ready = agySelected
+    ? nodeStatus.available && agyStatus.available
+    : nodeStatus.available && geminiReady;
   const readyState = !nodeStatus.available
     ? "not-ready"
-    : geminiReady
-      ? "ready"
-      : agyFallbackAvailable
+    : agySelected
+      ? agyStatus.available
         ? "partial"
-        : "not-ready";
+        : "not-ready"
+      : geminiReady
+        ? "ready"
+        : agyFallbackAvailable
+          ? "partial"
+          : "not-ready";
 
   const nextSteps = [];
+  if (agySelected && !agyStatus.available) {
+    nextSteps.push(
+      "AGY was requested via `--engine agy` but is not installed. Install it with `npm install -g agy`, or drop `--engine agy` to use the default Gemini CLI."
+    );
+  }
   if (!geminiStatus.available && !agyStatus.available) {
     nextSteps.push("Install Gemini CLI with `npm install -g @google/gemini-cli`.");
   }
-  if (geminiStatus.available && !geminiAuth.loggedIn) {
+  if (!agySelected && geminiStatus.available && !geminiAuth.loggedIn) {
     nextSteps.push("Run `gemini` once to authenticate via OAuth.");
   }
-  if (!geminiStatus.available && agyFallbackAvailable) {
+  if (!agySelected && !geminiStatus.available && agyFallbackAvailable) {
     nextSteps.push(
       "Gemini CLI is unavailable; AGY is present as a fallback. Use `--engine agy` to route through it (its auth state cannot be verified), or install Gemini CLI with `npm install -g @google/gemini-cli` for the default engine."
     );
@@ -186,6 +201,7 @@ function buildSetupReport(cwd, actionsTaken = []) {
   return {
     ready,
     readyState,
+    requestedEngine: requestedEngine || "auto",
     geminiReady,
     agyFallbackAvailable,
     node: nodeStatus,
@@ -203,12 +219,15 @@ function buildSetupReport(cwd, actionsTaken = []) {
 
 function handleSetup(argv) {
   const { options } = parseCommandInput(argv, {
-    valueOptions: ["cwd"],
+    valueOptions: ["cwd", "engine"],
     booleanOptions: ["json", "enable-review-gate", "disable-review-gate"]
   });
 
   const cwd = resolveCommandCwd(options);
   const workspaceRoot = resolveCommandWorkspace(options);
+  // Honor the engine the user routes to (flag wins over GEMINI_ENGINE) so the
+  // readiness verdict matches the engine the next command will actually use.
+  const requestedEngine = options.engine ?? process.env[ENGINE_ENV];
   const actionsTaken = [];
 
   if (options["enable-review-gate"]) {
@@ -219,7 +238,7 @@ function handleSetup(argv) {
     actionsTaken.push("Review gate disabled.");
   }
 
-  const finalReport = buildSetupReport(cwd, actionsTaken);
+  const finalReport = buildSetupReport(cwd, actionsTaken, { engine: requestedEngine });
   outputResult(options.json ? finalReport : renderSetupReport(finalReport), options.json);
 }
 

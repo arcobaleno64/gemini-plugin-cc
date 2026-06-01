@@ -88,6 +88,17 @@ export function installUnavailableGemini(binDir) {
   }
 }
 
+// Shadow only agy with a wrapper that fails its --version probe, leaving any
+// fake gemini untouched. Pair with installFakeGemini to assert that explicit
+// `--engine agy` readiness does not inherit Gemini's ready state.
+export function installUnavailableAgy(binDir) {
+  if (process.platform === "win32") {
+    fs.writeFileSync(path.join(binDir, "agy.cmd"), `@echo off\r\nexit /b 1\r\n`, "utf8");
+  } else {
+    writeExecutable(path.join(binDir, "agy"), "#!/bin/sh\nexit 1\n");
+  }
+}
+
 export function buildEnv(binDir) {
   const sep = process.platform === "win32" ? ";" : ":";
   return {

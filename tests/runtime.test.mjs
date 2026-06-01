@@ -10,6 +10,7 @@ import {
   buildEnvUnavailable,
   installFakeAgy,
   installFakeGemini,
+  installUnavailableAgy,
   installUnavailableEngines,
   installUnavailableGemini,
   readFakeState,
@@ -135,6 +136,28 @@ test("setup reports not ready when neither gemini nor agy is available", () => {
   assert.equal(payload.ready, false);
   assert.equal(payload.gemini.available, false);
   assert.equal(payload.agy.available, false);
+});
+
+// Setup readiness must reflect the engine the user actually selected. With an
+// explicit `--engine agy` the report must not inherit Gemini's ready state when
+// AGY itself is unavailable; otherwise the next `--engine agy` command fails
+// after setup said "ready".
+test("setup --engine agy is not ready when agy is unavailable even if gemini is authenticated", () => {
+  const binDir = makeTempDir();
+  installFakeGemini(binDir, "task"); // gemini installed + authenticated
+  installUnavailableAgy(binDir); // shadow any real agy as unavailable
+
+  const result = run("node", [SCRIPT, "setup", "--json", "--engine", "agy"], {
+    cwd: makeTempDir(),
+    env: buildEnv(binDir)
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.requestedEngine, "agy");
+  assert.equal(payload.agy.available, false);
+  assert.equal(payload.ready, false);
+  assert.ok(payload.nextSteps.some((step) => /agy/i.test(step)));
 });
 
 test("setup toggles the stop-time review gate and persists the choice", () => {
@@ -807,6 +830,31 @@ test("gemini engine delivers a metacharacter-laden prompt via stdin, never argv"
       !lastInvocation.args.some((arg) => String(arg).includes(fragment)),
       `argv must not contain prompt fragment: ${fragment}`
     );
+  }
+});
+
+// Unlike the prompt, --model rides in argv, and the gemini `.cmd` shim runs
+// under shell:true on Windows. A metacharacter-laden model id must be rejected
+// before any spawn so it can never be reinterpreted by cmd.exe.
+test("gemini engine rejects a shell-metacharacter --model and never reaches argv", () => {
+  const { repo, binDir } = setupRepo("task");
+  commit(repo, "README.md", "hello\n");
+
+  // Spawn node by absolute path so the OUTER test shell (shell:true on Windows
+  // for a bare "node") cannot itself split the payload before it reaches the
+  // companion; we are asserting the companion's own argv hygiene.
+  const payload = "flash & echo PWNED > %TEMP%\\gemini-pwned.txt & rem";
+  const result = run(process.execPath, [SCRIPT, "task", "--model", payload, "diagnose"], { cwd: repo, env: buildEnv(binDir) });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Invalid model id/i);
+
+  // The fake gemini may answer a --version probe, but the injection payload must
+  // never appear in any argv handed to the CLI.
+  const statePath = path.join(binDir, "fake-gemini-state.json");
+  if (fs.existsSync(statePath)) {
+    const args = readFakeState(binDir).lastInvocation?.args ?? [];
+    assert.ok(!args.some((arg) => String(arg).includes("PWNED")), "payload must never reach gemini argv");
   }
 });
 
