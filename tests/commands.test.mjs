@@ -110,3 +110,21 @@ test("setup authenticates by running gemini, not a nonexistent `gemini login`", 
   assert.doesNotMatch(source, /!agy login/);
   assert.match(source, /OAuth/i);
 });
+
+// --- Shell-safety: $ARGUMENTS must always be quoted when handed to the companion ---
+// Unquoted $ARGUMENTS lets the shell word-split, glob, or command-substitute the
+// user's raw slash-command text before the companion's parser/validation runs.
+test("every command quotes $ARGUMENTS in its companion invocation", () => {
+  const files = fs.readdirSync(COMMANDS_DIR).filter((f) => f.endsWith(".md"));
+  for (const file of files) {
+    for (const line of readCommand(file).split(/\r?\n/)) {
+      if (line.includes("gemini-companion.mjs") && line.includes("$ARGUMENTS")) {
+        assert.match(
+          line,
+          /"\$ARGUMENTS"/,
+          `${file}: $ARGUMENTS must be quoted as "$ARGUMENTS" to avoid shell word-splitting/injection — got: ${line.trim()}`
+        );
+      }
+    }
+  }
+});

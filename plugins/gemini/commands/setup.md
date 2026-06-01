@@ -7,7 +7,7 @@ allowed-tools: Bash(node:*), Bash(npm:*), AskUserQuestion
 Run:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" setup --json $ARGUMENTS
+node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" setup --json "$ARGUMENTS"
 ```
 
 Gemini CLI is the primary engine. AGY is an optional fallback that is only
@@ -32,7 +32,7 @@ npm install -g @google/gemini-cli
 - Then rerun:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" setup --json $ARGUMENTS
+node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" setup --json "$ARGUMENTS"
 ```
 
 Only if `requestedEngine` is `agy`, AGY is unavailable
@@ -51,7 +51,7 @@ npm install -g agy
 - Then rerun:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" setup --json $ARGUMENTS
+node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" setup --json "$ARGUMENTS"
 ```
 
 Do not ask about installation when:
