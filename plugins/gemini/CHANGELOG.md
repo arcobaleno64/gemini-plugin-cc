@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — parity audit
+## 0.6.0 — 2026-06-01 — parity audit
 
 ### Breaking
 - **`/gemini:setup` readiness now requires authentication.** `ready` is `true` only when Node **and** the Gemini CLI are present **and** OAuth is valid. An installed-but-unauthenticated Gemini now reports `ready: false` (previously `true`). New JSON fields: `readyState` (`ready` | `partial` | `not-ready`), `geminiReady`, `agyFallbackAvailable`.

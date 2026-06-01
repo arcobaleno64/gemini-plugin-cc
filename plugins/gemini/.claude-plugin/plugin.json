@@ -1,6 +1,6 @@
 {
   "name": "gemini",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Use Gemini/AGY from Claude Code to review code or delegate tasks.",
   "author": {
     "name": "arcobaleno64",
