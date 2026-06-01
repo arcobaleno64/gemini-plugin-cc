@@ -267,7 +267,16 @@ export function getAgyLoginStatus() {
 }
 
 export function getSessionRuntimeStatus() {
+  // Unlike the Codex app-server (a shared persistent runtime), the Gemini plugin
+  // invokes the CLI directly per command, so the runtime label describes which
+  // engine the next command would use rather than a shared session endpoint.
   const gemini = getGeminiAvailability();
   const agy = getAgyAvailability();
-  return { gemini, agy, available: gemini.available || agy.available };
+  const available = gemini.available || agy.available;
+  const label = gemini.available
+    ? "gemini CLI (per-command)"
+    : agy.available
+      ? "agy fallback (per-command)"
+      : "no engine available";
+  return { mode: "direct", gemini, agy, available, label };
 }

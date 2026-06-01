@@ -9,6 +9,9 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "bump-version": "node scripts/bump-version.mjs",
+    "check-version": "node scripts/bump-version.mjs --check",
+    "verify-contracts": "node scripts/verify-contracts.mjs"
   }
 }

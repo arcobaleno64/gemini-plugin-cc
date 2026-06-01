@@ -650,7 +650,7 @@ test("task-resume-candidate returns the latest completed task thread", () => {
     }
   ]);
 
-  const result = run("node", [SCRIPT, "task-resume-candidate", "--json"], { cwd: workspace });
+  const result = run("node", [SCRIPT, "task-resume-candidate", "--json"], { cwd: workspace, env: envWithoutSession() });
 
   assert.equal(result.status, 0, result.stderr);
   const payload = JSON.parse(result.stdout);
@@ -683,10 +683,117 @@ test("task-resume-candidate is blocked while a task is still running", () => {
     }
   ]);
 
-  const result = run("node", [SCRIPT, "task-resume-candidate", "--json"], { cwd: workspace });
+  const result = run("node", [SCRIPT, "task-resume-candidate", "--json"], { cwd: workspace, env: envWithoutSession() });
 
   assert.equal(result.status, 0, result.stderr);
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.found, false);
   assert.equal(payload.blocked, true);
+});
+
+// ---------------------------------------------------------------------------
+// P1-1: Claude session job filtering (--all + resume-candidate scoping)
+// ---------------------------------------------------------------------------
+
+function sessionJob(id, sessionId, updatedAt) {
+  return {
+    id,
+    status: "completed",
+    jobClass: "task",
+    kindLabel: "rescue",
+    title: "Gemini Task",
+    sessionId,
+    threadId: `thr_${id}`,
+    summary: `${sessionId} work`,
+    createdAt: updatedAt,
+    completedAt: updatedAt,
+    updatedAt
+  };
+}
+
+test("status scopes to the current session but --all crosses sessions", () => {
+  const workspace = makeTempDir();
+  seedState(workspace, [
+    sessionJob("task-current", "sess-current", "2026-03-18T15:31:00.000Z"),
+    sessionJob("task-other", "sess-other", "2026-03-18T15:21:00.000Z")
+  ]);
+  const env = { ...process.env, GEMINI_COMPANION_SESSION_ID: "sess-current" };
+
+  const scoped = JSON.parse(run("node", [SCRIPT, "status", "--json"], { cwd: workspace, env }).stdout);
+  const scopedIds = [scoped.latestFinished?.id, ...scoped.recent.map((job) => job.id)].filter(Boolean).sort();
+  assert.deepEqual(scopedIds, ["task-current"]);
+
+  const all = JSON.parse(run("node", [SCRIPT, "status", "--all", "--json"], { cwd: workspace, env }).stdout);
+  const allIds = [all.latestFinished?.id, ...all.recent.map((job) => job.id)].filter(Boolean).sort();
+  assert.deepEqual(allIds, ["task-current", "task-other"]);
+});
+
+test("task-resume-candidate prefers the current session over a newer other-session thread", () => {
+  const workspace = makeTempDir();
+  seedState(workspace, [
+    // Other-session job is newer; without scoping it would win the candidate.
+    sessionJob("task-other", "sess-other", "2026-03-18T15:35:00.000Z"),
+    sessionJob("task-current", "sess-current", "2026-03-18T15:30:00.000Z")
+  ]);
+  const env = { ...process.env, GEMINI_COMPANION_SESSION_ID: "sess-current" };
+
+  const payload = JSON.parse(run("node", [SCRIPT, "task-resume-candidate", "--json"], { cwd: workspace, env }).stdout);
+  assert.equal(payload.found, true);
+  assert.equal(payload.threadId, "thr_task-current");
+});
+
+test("task-resume-candidate hides other-session threads by default", () => {
+  const workspace = makeTempDir();
+  seedState(workspace, [sessionJob("task-other", "sess-other", "2026-03-18T15:35:00.000Z")]);
+  const env = { ...process.env, GEMINI_COMPANION_SESSION_ID: "sess-current" };
+
+  const payload = JSON.parse(run("node", [SCRIPT, "task-resume-candidate", "--json"], { cwd: workspace, env }).stdout);
+  assert.equal(payload.found, false);
+});
+
+// ---------------------------------------------------------------------------
+// P1-4: stdin prompt safety (gemini engine never puts the prompt in argv)
+// ---------------------------------------------------------------------------
+
+test("gemini engine delivers a metacharacter-laden prompt via stdin, never argv", () => {
+  const { repo, binDir } = setupRepo("task");
+  commit(repo, "README.md", "hello\n");
+
+  // Deliver the prompt over stdin so the OUTER test shell cannot reinterpret the
+  // metacharacters; this exercises the same companion -> gemini stdin path used
+  // in production (readStdinIfPiped -> runGeminiTurn input).
+  const nastyPrompt = `fix 'a' "b" \`c\` x;y|z&w $(id) %PATH% && rm -rf / \n line2`;
+  const result = run("node", [SCRIPT, "task"], { cwd: repo, env: buildEnv(binDir), input: nastyPrompt });
+
+  assert.equal(result.status, 0, result.stderr);
+  const { lastInvocation } = readFakeState(binDir);
+  // The full prompt arrives verbatim on stdin...
+  assert.equal(lastInvocation.prompt, nastyPrompt);
+  // ...and never leaks into argv.
+  assert.ok(!lastInvocation.args.includes(nastyPrompt));
+  for (const fragment of ["rm -rf /", "$(id)", "|z&w", "`c`", "%PATH%"]) {
+    assert.ok(
+      !lastInvocation.args.some((arg) => String(arg).includes(fragment)),
+      `argv must not contain prompt fragment: ${fragment}`
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// P1-3: reasoning noise on stderr must not pollute the stdout JSON parse
+// ---------------------------------------------------------------------------
+
+test("review parses cleanly even when gemini writes reasoning noise to stderr", () => {
+  const { repo, binDir } = setupRepo("review-noisy");
+  commit(repo, "src/app.js", "export const value = items[0];\n");
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = items[0].id;\n");
+
+  const result = run("node", [SCRIPT, "adversarial-review"], { cwd: repo, env: buildEnv(binDir) });
+
+  assert.equal(result.status, 0, result.stderr);
+  // The structured verdict/finding parsed despite the stderr reasoning lines...
+  assert.match(result.stdout, /Verdict: needs-attention/);
+  assert.match(result.stdout, /Missing empty-state guard/);
+  // ...and the reasoning is surfaced separately, not mixed into the JSON.
+  assert.match(result.stdout, /Reasoning:/);
 });

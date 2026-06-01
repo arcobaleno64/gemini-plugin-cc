@@ -62,6 +62,7 @@ function buildResponse() {
         next_steps: []
       });
     case "review-findings":
+    case "review-noisy":
       return JSON.stringify({
         verdict: "needs-attention",
         summary: "One adversarial concern surfaced.",
@@ -100,6 +101,11 @@ function respond(prompt) {
   if (SCENARIO === "task-fail") {
     process.stderr.write("Gemini turn failed: simulated failure.\n");
     process.exit(1);
+  }
+
+  if (SCENARIO === "review-noisy") {
+    // Reasoning/thought noise on stderr must NOT pollute the stdout JSON parse.
+    process.stderr.write("Considering empty-state edge cases...\nReasoning complete.\n");
   }
 
   const response = buildResponse();

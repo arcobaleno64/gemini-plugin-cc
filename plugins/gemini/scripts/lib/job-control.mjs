@@ -12,11 +12,14 @@ export function sortJobsNewestFirst(jobs) {
   return [...jobs].sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
 }
 
-function getCurrentSessionId(options = {}) {
+export function getCurrentSessionId(options = {}) {
   return options.env?.[SESSION_ID_ENV] ?? process.env[SESSION_ID_ENV] ?? null;
 }
 
-function filterJobsForCurrentSession(jobs, options = {}) {
+// Restrict jobs to the current Claude session. When no session id is known
+// (e.g. the lifecycle hook never ran) this falls back to returning every job so
+// the workspace's latest thread is still reachable.
+export function filterJobsForCurrentSession(jobs, options = {}) {
   const sessionId = getCurrentSessionId(options);
   if (!sessionId) {
     return jobs;
@@ -213,7 +216,10 @@ function matchJobReference(jobs, reference, predicate = () => true) {
 export function buildStatusSnapshot(cwd, options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const config = getConfig(workspaceRoot);
-  const jobs = sortJobsNewestFirst(filterJobsForCurrentSession(listJobs(workspaceRoot), options));
+  // Default to the current Claude session; --all crosses every session.
+  const allJobs = listJobs(workspaceRoot);
+  const scopedJobs = options.all ? allJobs : filterJobsForCurrentSession(allJobs, options);
+  const jobs = sortJobsNewestFirst(scopedJobs);
   const maxJobs = options.maxJobs ?? DEFAULT_MAX_STATUS_JOBS;
   const maxProgressLines = options.maxProgressLines ?? DEFAULT_MAX_PROGRESS_LINES;
 
