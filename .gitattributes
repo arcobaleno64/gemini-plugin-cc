@@ -1,0 +1,5 @@
+# Executable test fixtures are copied and run directly via their shebang line.
+# Force LF so a Windows (core.autocrlf) checkout — including WSL reading a
+# Windows-side clone — does not produce a CRLF shebang that fails to exec on
+# Linux/macOS ("/usr/bin/env: 'node\r': No such file or directory").
+*.cjs text eol=lf
