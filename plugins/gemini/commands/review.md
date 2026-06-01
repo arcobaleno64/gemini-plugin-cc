@@ -15,7 +15,6 @@ Core constraint:
 - This command is review-only.
 - Do not fix issues, apply patches, or suggest that you are about to make changes.
 - Your only job is to run the review and return Gemini's output verbatim to the user.
-- After presenting the review findings, STOP. You MUST explicitly ask the user which issues, if any, they want fixed before touching a single file.
 
 Execution mode rules:
 - If the raw arguments include `--wait`, do not ask. Run the review in the foreground.

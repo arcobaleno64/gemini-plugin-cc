@@ -80,3 +80,33 @@ test("adversarial-review calls the companion adversarial-review subcommand direc
   // It must NOT route through the task-only rescue subagent.
   assert.doesNotMatch(source, /gemini-rescue/);
 });
+
+// --- P0-2: stdout verbatim must not be contradicted by a fix-selection prompt ---
+
+test("review commands enforce verbatim output without a contradictory fix prompt", () => {
+  for (const name of ["review.md", "adversarial-review.md"]) {
+    const source = readCommand(name);
+    assert.match(source, /verbatim/i, `${name} must keep the verbatim rule`);
+    assert.doesNotMatch(source, /ask the user which issues/i, `${name} must not append a fix-selection prompt`);
+    assert.doesNotMatch(
+      source,
+      /which issues, if any, they want fixed/i,
+      `${name} must not append a fix-selection prompt`
+    );
+  }
+});
+
+// --- P0-4: AGY install is gated behind --engine agy; gemini is the primary engine ---
+
+test("setup prompts Gemini CLI install primarily and gates AGY behind --engine agy", () => {
+  const source = readCommand("setup.md");
+  assert.match(source, /Install Gemini CLI \(Recommended\)/);
+  assert.match(source, /--engine agy/, "AGY install must be gated behind --engine agy");
+});
+
+test("setup authenticates by running gemini, not a nonexistent `gemini login`", () => {
+  const source = readCommand("setup.md");
+  assert.doesNotMatch(source, /!gemini login/, "must not instruct the nonexistent `!gemini login`");
+  assert.doesNotMatch(source, /!agy login/);
+  assert.match(source, /OAuth/i);
+});
