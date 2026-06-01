@@ -210,6 +210,24 @@ test("non-JSON setup keeps the AGY-fallback partial label when gemini is unavail
   assert.match(result.stdout, /AGY fallback only — Gemini CLI not ready/);
 });
 
+// Setup readiness must use the same engine allow-set as the runtime resolver
+// (detectEngine accepts only auto/gemini/agy). An unknown engine value must
+// fail the preflight instead of inheriting Gemini readiness — otherwise the
+// next command resolves the same value and throws.
+test("setup reports not ready for an unrecognized engine value", () => {
+  const binDir = makeTempDir();
+  installFakeGemini(binDir, "task"); // gemini installed + authenticated
+
+  const result = run("node", [SCRIPT, "setup", "--json", "--engine", "bogus"], { cwd: makeTempDir(), env: buildEnv(binDir) });
+
+  assert.equal(result.status, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.requestedEngine, "bogus");
+  assert.equal(payload.ready, false);
+  assert.equal(payload.readyState, "not-ready");
+  assert.ok(payload.nextSteps.some((step) => /not recognized|auto.*gemini.*agy/i.test(step)));
+});
+
 test("setup toggles the stop-time review gate and persists the choice", () => {
   const binDir = makeTempDir();
   installFakeGemini(binDir, "task");

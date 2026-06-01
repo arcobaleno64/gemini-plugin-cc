@@ -162,27 +162,40 @@ function buildSetupReport(cwd, actionsTaken = [], options = {}) {
   // auth cannot be verified non-interactively), so AGY-present is "partial" and
   // AGY-missing is "not-ready".
   const requestedEngine = String(options.engine ?? "").trim().toLowerCase();
+  // Validate against the same set the runtime resolver accepts (detectEngine).
+  // An unrecognized engine must fail the preflight rather than inheriting Gemini
+  // readiness — otherwise the next command resolves the same value and throws.
+  const engineKnown =
+    requestedEngine === "" || requestedEngine === "auto" || requestedEngine === "gemini" || requestedEngine === "agy";
   const agySelected = requestedEngine === "agy";
   const geminiReady = geminiStatus.available && geminiAuth.loggedIn;
   const agyFallbackAvailable = agyStatus.available;
   // AGY auth cannot be verified non-interactively, so `--engine agy` is never
   // reported as fully `ready` — the most it reaches is `readyState: "partial"`
   // (binary present, auth unknown). `ready:true` is reserved for a verified
-  // runtime: an installed AND authenticated Gemini CLI.
-  const ready = !agySelected && nodeStatus.available && geminiReady;
-  const readyState = !nodeStatus.available
+  // runtime: an installed AND authenticated Gemini CLI. An unrecognized engine
+  // is never ready.
+  const ready = engineKnown && !agySelected && nodeStatus.available && geminiReady;
+  const readyState = !engineKnown
     ? "not-ready"
-    : agySelected
-      ? agyStatus.available
-        ? "partial"
-        : "not-ready"
-      : geminiReady
-        ? "ready"
-        : agyFallbackAvailable
+    : !nodeStatus.available
+      ? "not-ready"
+      : agySelected
+        ? agyStatus.available
           ? "partial"
-          : "not-ready";
+          : "not-ready"
+        : geminiReady
+          ? "ready"
+          : agyFallbackAvailable
+            ? "partial"
+            : "not-ready";
 
   const nextSteps = [];
+  if (!engineKnown) {
+    nextSteps.push(
+      `Engine "${requestedEngine}" is not recognized. Use \`--engine auto\`, \`gemini\`, or \`agy\` (or unset GEMINI_ENGINE).`
+    );
+  }
   if (agySelected && !agyStatus.available) {
     nextSteps.push(
       "AGY was requested via `--engine agy` but is not installed. Install it with `npm install -g agy`, or drop `--engine agy` to use the default Gemini CLI."
