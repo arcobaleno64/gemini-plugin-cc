@@ -1,6 +1,6 @@
 ---
 description: Run a standard Gemini code review of recent git changes
-argument-hint: '[--wait|--background] [--base <ref>] [--scope auto|working-tree|branch] [--engine <agy|gemini>] [--model <flash|pro>]'
+argument-hint: '[--wait|--background] [--deep] [--base <ref>] [--scope auto|working-tree|branch] [--engine <agy|gemini>] [--model <flash|pro>]'
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep, Bash(node:*), Bash(git:*), AskUserQuestion
 ---
@@ -39,6 +39,7 @@ Argument handling:
 - The companion script handles `--background` itself: it enqueues the review and spawns a detached `review-worker`, so the result persists even if this session ends. Do not use Claude's `run_in_background: true` for it.
 - `/gemini:review` is native-review only. It does not take custom focus text.
 - For an adversarial review that challenges design decisions, use `/gemini:adversarial-review`.
+- `--deep` runs an **agentic** review: Gemini uses its read-only tools to inspect repo context beyond the diff (dependency manifests, untracked files, callers) before producing the same JSON findings. It is slower and uses more tokens; omit it for the fast, diff-scoped default. Pair `--deep` with `--background` for larger changes.
 
 Foreground flow:
 - Run:

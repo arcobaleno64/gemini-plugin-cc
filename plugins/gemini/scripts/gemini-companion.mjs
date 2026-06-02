@@ -67,13 +67,28 @@ const DEFAULT_STATUS_WAIT_TIMEOUT_MS = 240000;
 const DEFAULT_STATUS_POLL_INTERVAL_MS = 2000;
 const STOP_REVIEW_TASK_MARKER = "";
 
+// Deep (agentic) review guidance, appended to the review prompt when `--deep` is
+// set. It invites the model to use its read-only tools to inspect repo context
+// beyond the diff (dependency manifests, callers, untracked artifacts) — closing
+// the gap vs a native agentic reviewer. Read-only: the gemini engine runs without
+// --yolo so write tools require approval that never arrives non-interactively.
+const DEEP_REVIEW_GUIDANCE = [
+  "",
+  "DEEP REVIEW MODE — look beyond the diff:",
+  "Use your available read-only tools to inspect relevant repository context before finalizing.",
+  "In particular check: dependency manifests (package.json / lockfiles) for any newly-used import,",
+  "the files and callers the change touches, and any untracked files that should not be committed.",
+  "Fold context-derived issues (undeclared dependencies, stray/untracked artifacts, broken call sites)",
+  "into the SAME JSON findings shape. Do not modify any files."
+].join("\n");
+
 function printUsage() {
   console.log(
     [
       "Usage:",
       "  node scripts/gemini-companion.mjs setup [--json] [--enable-review-gate|--disable-review-gate]",
-      "  node scripts/gemini-companion.mjs adversarial-review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [--engine agy|gemini|auto] [focus text]",
-      "  node scripts/gemini-companion.mjs review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [--engine agy|gemini|auto]",
+      "  node scripts/gemini-companion.mjs adversarial-review [--wait|--background] [--deep] [--base <ref>] [--scope <auto|working-tree|branch>] [--engine agy|gemini|auto] [focus text]",
+      "  node scripts/gemini-companion.mjs review [--wait|--background] [--deep] [--base <ref>] [--scope <auto|working-tree|branch>] [--engine agy|gemini|auto]",
       "  node scripts/gemini-companion.mjs task [--background] [--write] [--resume-last|--resume|--fresh] [--model <model>] [--effort <low|medium|high>] [--engine agy|gemini|auto] [prompt]",
       "  node scripts/gemini-companion.mjs status [job-id] [--all] [--json]",
       "  node scripts/gemini-companion.mjs result [job-id] [--json]",
@@ -345,11 +360,14 @@ async function executeReviewRun(request) {
   });
   const context = collectReviewContext(request.cwd, target);
   const template = loadPromptTemplate(ROOT_DIR, templateName);
-  const prompt = interpolateTemplate(template, {
+  const basePrompt = interpolateTemplate(template, {
     TARGET_LABEL: context.target.label,
     USER_FOCUS: request.focusText || "No extra focus provided.",
     REVIEW_INPUT: context.content
   });
+  // --deep: invite agentic repo exploration beyond the diff (read-only). Default
+  // stays the fast, diff-scoped single-shot review (zero behavior change).
+  const prompt = request.deep ? `${basePrompt}\n${DEEP_REVIEW_GUIDANCE}` : basePrompt;
   const result = await runGeminiReview(request.cwd, {
     prompt,
     model: request.model,
@@ -369,13 +387,15 @@ async function executeReviewRun(request) {
     result: parsed.parsed
   };
 
+  const fallbackBanner = result.modelFallback ? `> ⚠️ ${result.modelFallback}\n\n` : "";
+
   return {
     exitStatus: result.status,
     threadId: null,
     turnId: null,
     engine: result.engine ?? null,
     payload,
-    rendered: renderReviewResult(parsed, {
+    rendered: fallbackBanner + renderReviewResult(parsed, {
       reviewLabel: reviewName,
       targetLabel: context.target?.label ?? "",
       reasoningSummary: result.reasoningSummary
@@ -417,7 +437,8 @@ async function executeTaskRun(request) {
   const failureMessage = result.stderr ?? "";
   const taskMetadata = buildTaskRunMetadata({ prompt: request.prompt, resumeLast: request.resumeLast });
 
-  const rendered = renderTaskResult(
+  const fallbackBanner = result.modelFallback ? `${result.modelFallback}\n\n` : "";
+  const rendered = fallbackBanner + renderTaskResult(
     { rawOutput, failureMessage, reasoningSummary: result.reasoningSummary },
     { title: taskMetadata.title, jobId: request.jobId ?? null, write: Boolean(request.write) }
   );
@@ -517,7 +538,7 @@ function buildTaskRequest({ cwd, model, effort, engine, prompt, write, resumeLas
 // NOT stored — the worker re-resolves it from base/scope at run time (the same
 // re-resolution executeReviewRun already does), so the review reflects the tree
 // when the worker runs, mirroring how a background task bakes in its prompt.
-function buildReviewRequest({ cwd, base, scope, model, engine, focusText, reviewName, templateName }) {
+function buildReviewRequest({ cwd, base, scope, model, engine, focusText, reviewName, templateName, deep = false }) {
   return {
     cwd,
     base,
@@ -526,7 +547,8 @@ function buildReviewRequest({ cwd, base, scope, model, engine, focusText, review
     engine,
     focusText,
     reviewName,
-    templateName
+    templateName,
+    deep
   };
 }
 
@@ -605,7 +627,7 @@ function enqueueBackgroundJob(cwd, job, request, workerCommand) {
 async function handleReviewCommand(argv, { reviewName, templateName, supportsFocus }) {
   const { options, positionals } = parseCommandInput(argv, {
     valueOptions: ["base", "scope", "model", "engine", "cwd"],
-    booleanOptions: ["json", "wait", "background"],
+    booleanOptions: ["json", "wait", "background", "deep"],
     aliasMap: { m: "model" }
   });
 
@@ -637,7 +659,8 @@ async function handleReviewCommand(argv, { reviewName, templateName, supportsFoc
       engine: options.engine,
       focusText,
       reviewName,
-      templateName
+      templateName,
+      deep: options.deep
     });
     const { payload } = enqueueBackgroundJob(cwd, job, request, "review-worker");
     outputCommandResult(payload, renderQueuedTaskLaunch(payload), options.json);
@@ -657,6 +680,7 @@ async function handleReviewCommand(argv, { reviewName, templateName, supportsFoc
         focusText,
         reviewName,
         templateName,
+        deep: options.deep,
         onProgress: progress
       }),
     { json: options.json }

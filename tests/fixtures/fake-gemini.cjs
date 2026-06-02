@@ -98,6 +98,27 @@ function respond(prompt) {
   state.lastInvocation = invocation;
   saveState(state);
 
+  // Model-not-found fallback scenario: 404 unless invoked with the GA fallback
+  // model, mirroring the real CLI's ModelNotFound envelope so lib/gemini.mjs can
+  // detect it and retry on gemini-2.5-flash.
+  if (SCENARIO === "review-model-404") {
+    if (!argv.includes("gemini-2.5-flash")) {
+      process.stderr.write("ModelNotFoundError: Requested entity was not found.\n  code: 404\n");
+      process.stdout.write(JSON.stringify({ session_id: sessionId, error: { type: "Error", message: "Requested entity was not found.", code: 1 } }));
+      process.exit(1);
+    }
+    const review = JSON.stringify({
+      verdict: "needs-attention",
+      summary: "Reviewed on the GA fallback model.",
+      findings: [
+        { severity: "high", title: "Fallback-path finding", body: "Surfaced by the fallback model.", file: "src/app.js", line_start: 1, line_end: 1, confidence: 0.9, recommendation: "Address it." }
+      ],
+      next_steps: []
+    });
+    process.stdout.write(JSON.stringify({ session_id: sessionId, response: review }));
+    process.exit(0);
+  }
+
   if (SCENARIO === "task-fail") {
     process.stderr.write("Gemini turn failed: simulated failure.\n");
     process.exit(1);

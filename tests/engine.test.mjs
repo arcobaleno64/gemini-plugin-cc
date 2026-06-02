@@ -12,7 +12,7 @@ test("model aliases resolve to verified-valid IDs", () => {
   assert.equal(normalizeRequestedModel("flash3"), "gemini-3-flash-preview");
   assert.equal(normalizeRequestedModel("pro"), "gemini-3.1-pro-preview");
   assert.equal(normalizeRequestedModel("pro3"), "gemini-3.1-pro-preview");
-  assert.equal(normalizeRequestedModel("lite3"), "gemini-3.1-flash-lite-preview");
+  assert.equal(normalizeRequestedModel("lite3"), "gemini-3.1-flash-lite");
   assert.equal(normalizeRequestedModel("flash25"), "gemini-2.5-flash");
   assert.equal(normalizeRequestedModel("pro25"), "gemini-2.5-pro");
   assert.equal(normalizeRequestedModel("lite"), "gemini-2.5-flash-lite");

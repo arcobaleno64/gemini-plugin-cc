@@ -9,7 +9,7 @@
 ## 功能特色
 
 - **`/gemini:rescue`** — 將調查、除錯或實作任務委派給 Gemini。可在前景執行或以背景工作方式分離執行。
-- **`/gemini:review`** — 對當前 diff 或分支執行標準（務實）程式碼審查，找出真實 bug、缺漏之錯誤處理與未竟之程式路徑。
+- **`/gemini:review`** — 對當前 diff 或分支執行標準（務實）程式碼審查，找出真實 bug、缺漏之錯誤處理與未竟之程式路徑。加 `--deep` 可進行 agentic 探查、看 diff 以外的 repo 脈絡。
 - **`/gemini:adversarial-review`** — 對當前 diff 或分支執行對抗性程式碼審查，挑戰設計決策，回傳含嚴重程度評級的結構化發現。
 - **`/gemini:setup`** — 檢查 Gemini CLI / AGY 的可用性與 OAuth 狀態。
 - **`/gemini:status`** — 查看作用中與已完成的背景工作。
@@ -32,6 +32,10 @@
 **安裝 AGY**（選用備援）：`curl -fsSL https://antigravity.google/cli/install.sh | bash`
 
 **認證**：執行一次 `gemini` 完成 OAuth 登入。不需要 API 金鑰。
+
+> **重要提示（貼近現實）：**
+> - **2026-06-18**：免費／個人版 gemini CLI 存取終止。之後 **gemini** 引擎需付費 Gemini Code Assist Standard/Enterprise tier;**AGY**（`--engine agy`）成為免費途徑。
+> - **Gemini 3.5**（Flash/Pro）已在 API GA，但 **gemini CLI 0.44.1（最新）並不提供**——會回 404。請改走 **AGY** 引擎（固定模型）。若所請求 id 不可用，外掛會優雅降級至 GA 模型。詳見 [模型別名](#模型別名) 與 [docs/MODEL_COMPARISON.md](docs/MODEL_COMPARISON.md)。
 
 ---
 
@@ -114,6 +118,7 @@
 | 旗標 | 說明 |
 |---|---|
 | `--wait` / `--background` | 前景或分離執行 |
+| `--deep` | Agentic 審查——讓 Gemini 探查 diff 以外的 repo 脈絡（較慢、較耗 token;gemini 引擎） |
 | `--base <ref>` | 與特定 git ref 比較 |
 | `--scope <auto\|working-tree\|branch>` | Diff 範圍 |
 | `--engine <gemini\|agy\|auto>` | 覆蓋引擎 |
@@ -125,6 +130,7 @@
 
 | 旗標 | 說明 |
 |---|---|
+| `--deep` | Agentic 審查——讓 Gemini 探查 diff 以外的 repo 脈絡（較慢、較耗 token;gemini 引擎） |
 | `--base <ref>` | 與特定 git ref 比較 |
 | `--scope <auto\|working-tree\|branch>` | Diff 範圍 |
 | `--engine <gemini\|agy\|auto>` | 覆蓋引擎 |
@@ -180,13 +186,15 @@
 | `flash25` | `gemini-2.5-flash` | 穩定 2.5 Flash（GA） |
 | `pro25` | `gemini-2.5-pro` | 穩定 2.5 Pro（GA） |
 | `lite` / `fast` | `gemini-2.5-flash-lite` | 高效低成本（GA） |
-| `lite3` | `gemini-3.1-flash-lite-preview` | Gemini 3.1 低成本版（preview） |
+| `lite3` | `gemini-3.1-flash-lite` | Gemini 3.1 Flash-Lite（GA，低成本） |
 
 ### 模型別名說明
 
 - 別名與努力等級集中於單一來源——`plugins/gemini/scripts/lib/model-map.mjs`——且 `npm test` 會以其驗證上表，二者不致漂移。
 - **努力對映**（於提供 `--effort` 但未給 `--model` 時套用）：`none`/`minimal` → `gemini-2.5-flash-lite`；`low`/`medium` → `gemini-3-flash-preview`；`high`/`xhigh` → `gemini-3.1-pro-preview`。
 - **Preview ID 可能變動。** 以 `-preview` 結尾之 model ID 追隨 Google 的 preview channel（最後驗證於 gemini CLI 0.44.1）。若某別名無法解析，以 `--model <精確 ID>` 覆蓋——任何非已知別名之值將原樣透傳給 CLI。
+- **Gemini 3.5 尚未上 CLI。** `gemini-3.5-flash` 與 `gemini-3.5-pro` 已在 Gemini API GA，但 **gemini CLI 0.44.1（目前最新）並不提供**——會回 `404 ModelNotFound`。欲用 Gemini 3.5 Flash，請改走 **AGY 引擎**（`--engine agy`，由其固定執行;無 `--model`/`--effort` 選擇）。
+- **模型優雅降級。** 若所請求之 model id 在你的 gemini CLI 上找不到（preview/已退役 id，或 CLI 版本落差），外掛會**以 GA fallback `gemini-2.5-flash` 重試一次**並印出明確提示——讓過時 id 優雅降級，而非硬性失敗。
 - **AGY 忽略 `--model` 與 `--effort`。** `agy --print` 鎖定 Gemini 3.5 Flash（High）、無模型／努力選擇；`--engine agy` 時外掛會印出提示並忽略此二旗標。
 
 ---
