@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — parity-audit follow-up fixes
+## 0.6.1 — 2026-06-02 — parity-audit follow-up fixes
 
 ### Fixed (P0)
 - **`/gemini:rescue` resume prompt never fired.** `handleTaskResumeCandidate` emitted `found`, but `commands/rescue.md` keys the "continue current thread?" prompt off `available` (as upstream codex does). The companion now emits `available` in all branches; a contract guard test asserts `available` is present and the legacy `found` is gone.
