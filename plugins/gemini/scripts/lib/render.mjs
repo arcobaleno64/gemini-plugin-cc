@@ -202,6 +202,7 @@ export function renderSetupReport(report) {
     `- agy auth: ${report.agyAuth.detail}`,
     `- session runtime: ${report.sessionRuntime.label}`,
     `- review gate: ${report.reviewGateEnabled ? "enabled" : "disabled"}`,
+    `- model aliases: ${report.modelAliases?.total ?? 0} (${report.modelAliases?.preview ?? 0} preview), verified ${report.modelAliases?.lastVerified ?? "unknown"}`,
     ""
   ];
 
@@ -293,33 +294,6 @@ export function renderReviewResult(parsedResult, meta) {
     for (const step of data.next_steps) {
       lines.push(`- ${step}`);
     }
-  }
-
-  appendReasoningSection(lines, meta.reasoningSummary);
-
-  return `${lines.join("\n").trimEnd()}\n`;
-}
-
-export function renderNativeReviewResult(result, meta) {
-  const stdout = result.stdout.trim();
-  const stderr = result.stderr.trim();
-  const lines = [
-    `# Gemini ${meta.reviewLabel}`,
-    "",
-    `Target: ${meta.targetLabel}`,
-    ""
-  ];
-
-  if (stdout) {
-    lines.push(stdout);
-  } else if (result.status === 0) {
-    lines.push("Gemini review completed without any stdout output.");
-  } else {
-    lines.push("Gemini review failed.");
-  }
-
-  if (stderr) {
-    lines.push("", "stderr:", "", "```text", stderr, "```");
   }
 
   appendReasoningSection(lines, meta.reasoningSummary);

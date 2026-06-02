@@ -187,7 +187,7 @@
 - 別名與努力等級集中於單一來源——`plugins/gemini/scripts/lib/model-map.mjs`——且 `npm test` 會以其驗證上表，二者不致漂移。
 - **努力對映**（於提供 `--effort` 但未給 `--model` 時套用）：`none`/`minimal` → `gemini-2.5-flash-lite`；`low`/`medium` → `gemini-3-flash-preview`；`high`/`xhigh` → `gemini-3.1-pro-preview`。
 - **Preview ID 可能變動。** 以 `-preview` 結尾之 model ID 追隨 Google 的 preview channel（最後驗證於 gemini CLI 0.44.1）。若某別名無法解析，以 `--model <精確 ID>` 覆蓋——任何非已知別名之值將原樣透傳給 CLI。
-- **AGY 忽略 `--model` 與 `--effort`。** AGY 之模型與推理分級由其互動選擇；`--engine agy` 時外掛會印出提示並忽略此二旗標。
+- **AGY 忽略 `--model` 與 `--effort`。** `agy --print` 鎖定 Gemini 3.5 Flash（High）、無模型／努力選擇；`--engine agy` 時外掛會印出提示並忽略此二旗標。
 
 ---
 
@@ -200,7 +200,9 @@
 
 可透過 `--engine` 旗標或 `GEMINI_ENGINE` 環境變數覆蓋。
 
-> `--model` 與 `--effort` 僅適用於 **gemini** 引擎。AGY 之模型與分級由其互動選擇，故 `--engine agy` 時外掛會忽略 `--model`/`--effort`。
+> `--model` 與 `--effort` 僅適用於 **gemini** 引擎。`agy --print` 鎖定 Gemini 3.5 Flash（High）、無 model/effort 旗標，故 `--engine agy` 時外掛會忽略 `--model`/`--effort`。
+
+> **AGY 紀錄恢復僅在 Windows 與 Linux 驗證通過。** 因 `agy --print` 不透過 pipe 輸出（上游 [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466)），外掛改從磁碟上的「brain」紀錄恢復回應——`~/.gemini/antigravity-cli/brain`（Windows 1.0.3，已驗證）或 `~/.antigravity-cli/brain`（Linux 1.0.2，回報）。**macOS 尚未驗證**——其 brain 路徑未知，故 `--engine agy` 在 macOS 上可能無法啟動。若於 macOS 使用 AGY，請開 issue 回報實際的 brain 目錄，以便補上該路徑。
 
 ---
 
@@ -208,6 +210,7 @@
 
 - **Stdin 傳遞（gemini 引擎）**：`gemini` 引擎之提示透過 stdin（Node.js `spawnSync` 的 `input` 選項）傳遞、從不插入 shell 命令字串，故無論內容為何皆無 shell injection 風險。`agy` 引擎無 stdin 模式，提示以 CLI 引數傳入；處理不可信輸入時請優先使用預設之 `gemini` 引擎。
 - **Windows `.cmd` wrapper**：npm 將 `gemini`／`agy` 安裝為 `.cmd` shim，需 `shell: true` 方能啟動。因 gemini 提示走 stdin（從不進 argv），`shell: true` 永不將其暴露給 `cmd.exe` 解析——argv 中僅有受控旗標（model id、`--yolo` 等）。
+- **DEP0190 警告屬無害**：於 Windows 上可能見到 `(node:NNN) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.`。此處**可安心忽略**——該 deprecation 針對的是在 `shell: true` 下把*提示內容*放入 argv，但本外掛的 gemini 引擎從不如此：提示走 stdin，僅受控旗標進入 argv（且各自驗證，如 model id 須符合 `^[A-Za-z0-9][A-Za-z0-9._-]*$`）。此警告是 Node 對該通用模式的提醒，並非本程式路徑中的實際注入點。
 - **AGY positional 提示**：AGY 無 stdin 模式，故 `--engine agy` 時提示以 positional CLI 引數傳入，於 Windows 受 `cmd.exe` 引號規則影響。**請勿將不可信提示內容經 `--engine agy` 傳遞**——應優先使用預設之 `gemini` 引擎。
 - **憑證處理**：`~/.gemini/oauth_creds.json` 之 OAuth 憑證僅用於 `getGeminiLoginStatus()` 檢查 token 是否過期；本外掛從不記錄、複製或傳輸之。
 - **`.gitignore`**：`.omc/` 狀態目錄（工作日誌、會話狀態）已排除於版本控制之外。
@@ -224,6 +227,7 @@
 | setup 顯示 `… token expired` | OAuth token 已過期 | 再次執行 `!gemini` 以更新憑證 |
 | `Status: partial (AGY fallback only …)` | Gemini CLI 不可用但 AGY 存在 | 安裝 Gemini CLI，或使用 `--engine agy`（其認證無法驗證） |
 | Windows：命令可解析但執行失敗 | `.cmd` wrapper／PATH | 確認 `where gemini` 可解析；外掛以 `shell: true` 啟動裸命令名以尋得 `.cmd` shim |
+| `--engine agy` 於 macOS 無法啟動 | macOS 上 AGY brain 路徑未驗證 | 紀錄恢復僅在 Windows/Linux 驗證；於 macOS 請確認 `agy` 的 brain 目錄並開 issue 回報其位置 |
 
 如需認證，執行一次 **`!gemini`**——外掛即以呼叫 `gemini` 自身完成 OAuth。**並無** `gemini login` 子命令。唯有 Node **且** Gemini CLI 皆存在**且** OAuth 有效時，`setup` 方回報 `ready: true`；已安裝但未認證之 Gemini 將回報為 *not ready*。
 

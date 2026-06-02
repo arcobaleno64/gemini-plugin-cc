@@ -59,6 +59,7 @@ import {
   getGeminiPlanTier,
   getSessionRuntimeStatus
 } from "./lib/gemini.mjs";
+import { MODEL_MAP_METADATA, MODEL_ALIAS_ENTRIES } from "./lib/model-map.mjs";
 
 const ROOT_DIR = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const REVIEW_SCHEMA = path.join(ROOT_DIR, "schemas", "review-output.schema.json");
@@ -228,6 +229,14 @@ function buildSetupReport(cwd, actionsTaken = [], options = {}) {
     );
   }
 
+  // Surface model-alias provenance so preview-channel drift is visible: how many
+  // aliases resolve to *-preview IDs (which can change) and when they were last
+  // verified. Defensive in case the alias table is ever malformed.
+  const modelAliasCount = Array.isArray(MODEL_ALIAS_ENTRIES) ? MODEL_ALIAS_ENTRIES.length : 0;
+  const previewAliasCount = Array.isArray(MODEL_ALIAS_ENTRIES)
+    ? MODEL_ALIAS_ENTRIES.filter((entry) => entry.preview).length
+    : 0;
+
   return {
     ready,
     readyState,
@@ -243,6 +252,11 @@ function buildSetupReport(cwd, actionsTaken = [], options = {}) {
     agyAuth,
     sessionRuntime: getSessionRuntimeStatus(),
     reviewGateEnabled: config.stopReviewGateEnabled ?? false,
+    modelAliases: {
+      total: modelAliasCount,
+      preview: previewAliasCount,
+      lastVerified: MODEL_MAP_METADATA?.lastVerified ?? "unknown"
+    },
     actionsTaken,
     nextSteps
   };
@@ -340,6 +354,7 @@ async function executeReviewRun(request) {
     prompt,
     model: request.model,
     engine: request.engine,
+    isAdversarial: templateName === "adversarial-review",
     onProgress: request.onProgress
   });
 
@@ -498,6 +513,23 @@ function buildTaskRequest({ cwd, model, effort, engine, prompt, write, resumeLas
   };
 }
 
+// Serializable review request for the detached review-worker. The diff target is
+// NOT stored — the worker re-resolves it from base/scope at run time (the same
+// re-resolution executeReviewRun already does), so the review reflects the tree
+// when the worker runs, mirroring how a background task bakes in its prompt.
+function buildReviewRequest({ cwd, base, scope, model, engine, focusText, reviewName, templateName }) {
+  return {
+    cwd,
+    base,
+    scope,
+    model,
+    engine,
+    focusText,
+    reviewName,
+    templateName
+  };
+}
+
 function readTaskPrompt(cwd, options, positionals) {
   if (options["prompt-file"]) {
     return fs.readFileSync(path.resolve(cwd, options["prompt-file"]), "utf8");
@@ -526,9 +558,9 @@ async function runForegroundCommand(job, runner, options = {}) {
   return execution;
 }
 
-function spawnDetachedTaskWorker(cwd, jobId) {
+function spawnDetachedWorker(cwd, jobId, workerCommand) {
   const scriptPath = path.join(ROOT_DIR, "scripts", "gemini-companion.mjs");
-  const child = spawn(process.execPath, [scriptPath, "task-worker", "--cwd", cwd, "--job-id", jobId], {
+  const child = spawn(process.execPath, [scriptPath, workerCommand, "--cwd", cwd, "--job-id", jobId], {
     cwd,
     env: process.env,
     detached: true,
@@ -539,11 +571,14 @@ function spawnDetachedTaskWorker(cwd, jobId) {
   return child;
 }
 
-function enqueueBackgroundTask(cwd, job, request) {
+// Persist a job and hand it to a detached worker (`task-worker` or
+// `review-worker`). Both job classes share the same enqueue/state machinery; the
+// worker subcommand only decides which executor deserializes the request.
+function enqueueBackgroundJob(cwd, job, request, workerCommand) {
   const { logFile } = createTrackedProgress(job);
   appendLogLine(logFile, "Queued for background execution.");
 
-  const child = spawnDetachedTaskWorker(cwd, job.id);
+  const child = spawnDetachedWorker(cwd, job.id, workerCommand);
   const queuedRecord = {
     ...job,
     status: "queued",
@@ -589,6 +624,25 @@ async function handleReviewCommand(argv, { reviewName, templateName, supportsFoc
     jobClass: "review",
     summary: `${reviewName} ${target.label}`
   });
+
+  if (options.background) {
+    // Persist the review to a detached review-worker so the result survives an
+    // interrupted Claude session (parity with background tasks). Returns a job id
+    // immediately; track via /gemini:status and /gemini:result.
+    const request = buildReviewRequest({
+      cwd,
+      base: options.base,
+      scope: options.scope,
+      model: options.model,
+      engine: options.engine,
+      focusText,
+      reviewName,
+      templateName
+    });
+    const { payload } = enqueueBackgroundJob(cwd, job, request, "review-worker");
+    outputCommandResult(payload, renderQueuedTaskLaunch(payload), options.json);
+    return;
+  }
 
   await runForegroundCommand(
     job,
@@ -655,7 +709,7 @@ async function handleTask(argv) {
       resumeLast,
       jobId: job.id
     });
-    const { payload } = enqueueBackgroundTask(cwd, job, request);
+    const { payload } = enqueueBackgroundJob(cwd, job, request, "task-worker");
     outputCommandResult(payload, renderQueuedTaskLaunch(payload), options.json);
     return;
   }
@@ -679,16 +733,18 @@ async function handleTask(argv) {
   );
 }
 
-async function handleTaskWorker(argv) {
+// Shared worker body for the detached `task-worker` / `review-worker` subcommands:
+// load the persisted job, deserialize its request, and run the matching executor
+// under runTrackedJob (which records running/completed/failed state + result).
+async function runStoredJobWorker(argv, { executor, label }) {
   const { options } = parseCommandInput(argv, {
     valueOptions: ["cwd", "job-id"]
   });
 
   if (!options["job-id"]) {
-    throw new Error("Missing required --job-id for task-worker.");
+    throw new Error(`Missing required --job-id for ${label}.`);
   }
 
-  const cwd = resolveCommandCwd(options);
   const workspaceRoot = resolveCommandWorkspace(options);
   const storedJob = readStoredJob(workspaceRoot, options["job-id"]);
   if (!storedJob) {
@@ -697,7 +753,7 @@ async function handleTaskWorker(argv) {
 
   const request = storedJob.request;
   if (!request || typeof request !== "object") {
-    throw new Error(`Stored job ${options["job-id"]} is missing its task request payload.`);
+    throw new Error(`Stored job ${options["job-id"]} is missing its request payload.`);
   }
 
   const { logFile, progress } = createTrackedProgress(
@@ -716,12 +772,20 @@ async function handleTaskWorker(argv) {
       logFile
     },
     () =>
-      executeTaskRun({
+      executor({
         ...request,
         onProgress: progress
       }),
     { logFile }
   );
+}
+
+async function handleTaskWorker(argv) {
+  return runStoredJobWorker(argv, { executor: executeTaskRun, label: "task-worker" });
+}
+
+async function handleReviewWorker(argv) {
+  return runStoredJobWorker(argv, { executor: executeReviewRun, label: "review-worker" });
 }
 
 async function handleStatus(argv) {
@@ -777,7 +841,9 @@ async function handleTaskResumeCandidate(argv) {
   const jobs = sortJobsNewestFirst(filterJobsForCurrentSession(listJobs(workspaceRoot)));
   const activeTask = jobs.find((job) => job.jobClass === "task" && (job.status === "queued" || job.status === "running"));
   if (activeTask) {
-    const payload = { found: false, blocked: true, activeJobId: activeTask.id };
+    // `available` mirrors upstream codex-companion (rescue.md keys off it). Do not
+    // rename to `found` — commands/rescue.md asks the agent to read `available`.
+    const payload = { available: false, blocked: true, activeJobId: activeTask.id };
     outputResult(
       options.json ? payload : `Task ${activeTask.id} is still running. Use /gemini:status before resuming.\n`,
       options.json
@@ -786,8 +852,8 @@ async function handleTaskResumeCandidate(argv) {
   }
   const candidate = jobs.find((job) => job.jobClass === "task" && job.status === "completed" && job.threadId);
   const payload = candidate
-    ? { found: true, jobId: candidate.id, threadId: candidate.threadId, title: candidate.title }
-    : { found: false };
+    ? { available: true, jobId: candidate.id, threadId: candidate.threadId, title: candidate.title }
+    : { available: false };
   outputResult(
     options.json ? payload : (candidate ? `Resume candidate: ${candidate.id} — ${candidate.title}\n` : "No resume candidate found.\n"),
     options.json
@@ -863,6 +929,9 @@ async function main() {
       break;
     case "task-worker":
       await handleTaskWorker(argv);
+      break;
+    case "review-worker":
+      await handleReviewWorker(argv);
       break;
     case "status":
       await handleStatus(argv);
