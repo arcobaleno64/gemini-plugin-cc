@@ -7,6 +7,29 @@
 
 ---
 
+## 〇、修復狀態（Remediation status — v0.6.1）
+
+> 下方第一～七節為 **v0.6.0 時點之評估快照**，原樣保留以資對照。
+> 此處彙整本報告所列修正清單於 **v0.6.1** 之落實狀態。**分數未在此重評**——完整重新評分留待下一次詳細對比（屆時應反映以下修復後的提升）。
+
+| 原修正項 | 狀態 | 落實摘要 |
+|---|---|---|
+| **P0** rescue `available`↔`found` | ✅ 已修 | companion 改回 `available`（棄 `found`），rescue 續接提示得以觸發;守則測試鎖定欄位名。 |
+| **P1** 背景 review 無持久化 | ✅ 已修 | 新增 `review-worker`（仿 task-worker），背景 review 結果可持久化並經 `/status`/`/result` 取回。 |
+| **P1** 死碼 `renderNativeReviewResult` | ✅ 已修 | 移除。 |
+| **P1** stop-gate 靜默 fail-open | ✅ 已修 | 失敗時 `systemMessage`+stderr 可見化（保 fail-open）;顯式 `--scope working-tree`。 |
+| **P1** AGY macOS path 未驗 | ✅ 已記 | README EN+zh-TW 標明僅驗於 Windows/Linux、macOS 未驗（不虛構路徑）。 |
+| **P2** 進度列標籤錯置 | ✅ 已修 | `runGeminiReview` 模式感知（`isAdversarial`）。 |
+| **P2** stderr 雜訊滲入輸出 | ✅ 已修 | `extractReasoningSummary` 取末五行前濾除 DEP0190/256-color/ripgrep。 |
+| **P2** preview 模型漂移 | ✅ 已修 | `/gemini:setup` 顯示別名數/preview 數/lastVerified。 |
+| **P2** DEP0190 說明 | ✅ 已記 | README 註明屬無害（提示走 stdin，不入 argv）。 |
+| **P3** `gemini-prompting/references/` 缺 | ✅ 已補 | 補 blocks/recipes/antipatterns 三檔＋SKILL 連結。 |
+| 附帶（對抗式驗證揪出） | ✅ 已修 | README 既有舊誤「AGY 互動選模」更正為「鎖定 Gemini 3.5 Flash High、忽略 model/effort」。 |
+
+**把關**：測試 154→159（含背景 review-worker、available 守則、setup 漂移、stop-gate hook）全綠;check-version／verify-contracts 過;實跑＋雲端 CI＋5 路對抗式驗證。詳見 [CHANGELOG](../plugins/gemini/CHANGELOG.md) v0.6.1。
+
+---
+
 ## 一、總評
 
 | 維度 | 分數（/5） | 說明 |

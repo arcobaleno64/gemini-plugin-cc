@@ -27,6 +27,7 @@ import {
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SCRIPT = path.join(ROOT, "plugins", "gemini", "scripts", "gemini-companion.mjs");
+const STOP_GATE_HOOK = path.join(ROOT, "plugins", "gemini", "scripts", "stop-review-gate-hook.mjs");
 
 function setupRepo(scenario = "task") {
   const repo = makeTempDir();
@@ -1120,4 +1121,58 @@ test("review parses cleanly even when gemini writes reasoning noise to stderr", 
   assert.match(result.stdout, /Missing empty-state guard/);
   // ...and the reasoning is surfaced separately, not mixed into the JSON.
   assert.match(result.stdout, /Reasoning:/);
+});
+
+// ---------------------------------------------------------------------------
+// stop-review-gate hook
+// ---------------------------------------------------------------------------
+
+function runStopGate(cwd, env) {
+  return run("node", [STOP_GATE_HOOK], { cwd, env, input: JSON.stringify({ cwd }) });
+}
+
+test("stop-gate stays silent and exits 0 when the gate is disabled", () => {
+  const workspace = makeTempDir();
+  seedState(workspace, [], { stopReviewGateEnabled: false });
+
+  const result = runStopGate(workspace, envWithoutSession());
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), "");
+});
+
+test("stop-gate proceeds without a warning when enabled but no write task completed", () => {
+  const workspace = makeTempDir();
+  seedState(
+    workspace,
+    [{ id: "review-1", status: "completed", jobClass: "review", kindLabel: "review", title: "Gemini Review" }],
+    { stopReviewGateEnabled: true }
+  );
+
+  const result = runStopGate(workspace, envWithoutSession());
+  assert.equal(result.status, 0, result.stderr);
+  const decision = JSON.parse(result.stdout);
+  assert.equal(decision.decision, "proceed");
+  assert.ok(!decision.systemMessage, "no skip warning when there is nothing to review");
+});
+
+test("stop-gate fails OPEN with a visible warning when the review cannot run", () => {
+  // A completed --write task arms the gate, but the review is forced to fail:
+  // unavailable engines + a non-git workspace guarantee the companion errors,
+  // so the hook must proceed (never trap the user) AND surface why.
+  const workspace = makeTempDir();
+  const binDir = makeTempDir();
+  installUnavailableEngines(binDir);
+  seedState(
+    workspace,
+    [{ id: "task-1", status: "completed", jobClass: "task", write: true, kindLabel: "rescue", title: "Gemini Task" }],
+    { stopReviewGateEnabled: true }
+  );
+
+  const result = runStopGate(workspace, buildEnvUnavailable(binDir));
+  assert.equal(result.status, 0, result.stderr);
+  const decision = JSON.parse(result.stdout);
+  assert.equal(decision.decision, "proceed", "fail-open: never block on review failure");
+  assert.match(decision.systemMessage ?? "", /skipped/i);
+  // The same warning is written to stderr as a belt-and-suspenders fallback.
+  assert.match(result.stderr, /review gate skipped/i);
 });
