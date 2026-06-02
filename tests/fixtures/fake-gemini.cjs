@@ -126,6 +126,9 @@ function respond(prompt) {
 
   if (SCENARIO === "review-noisy") {
     // Reasoning/thought noise on stderr must NOT pollute the stdout JSON parse.
+    // The terminal-capability warning (true-color variant emitted by gemini CLI
+    // 0.44.1) must be filtered out of the Reasoning section, not surfaced as it.
+    process.stderr.write("Warning: True color (24-bit) support not detected. Using a terminal with true color enabled will result in a better visual experience.\n");
     process.stderr.write("Considering empty-state edge cases...\nReasoning complete.\n");
   }
 

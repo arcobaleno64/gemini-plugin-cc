@@ -55,6 +55,7 @@ const REASONING_NOISE = [
   /--trace-deprecation/,
   /256-color support not detected/i,
   /Using a terminal with at least 256-color/i,
+  /true color/i,
   /Ripgrep is not available/i,
   /Falling back to GrepTool/i
 ];
