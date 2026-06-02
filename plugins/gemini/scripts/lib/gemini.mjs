@@ -15,6 +15,26 @@ const DEFAULT_SPAWN_TIMEOUT_MS = 600_000; // 10 minutes (gemini)
 const AGY_SPAWN_TIMEOUT_MS = 120_000; // 2 minutes
 const MAX_BUFFER = 50 * 1024 * 1024; // 50 MB
 
+// Stable GA model served by every gemini CLI we target (verified on 0.44.1). Used
+// as the graceful-degradation target when a requested model id is not found.
+const GA_FALLBACK_MODEL = "gemini-2.5-flash";
+
+// Detect a "model not found" failure from the gemini CLI so the plugin can fall
+// back instead of hard-failing. The CLI surfaces this as `ModelNotFoundError` /
+// `code: 404` on stderr and, with --output-format json, an envelope carrying
+// `{ error: { message: "Requested entity was not found." } }` instead of
+// `response`. Preview/retired ids and CLI-version skew (e.g. gemini-3.5-flash is
+// not served by CLI 0.44.1) are the common triggers. Scoped narrowly to
+// model-not-found so auth/quota errors are NOT silently retried.
+function isModelNotFoundError(rawStdout, rawStderr, parsedEnvelope = null) {
+  const text = `${rawStdout ?? ""}\n${rawStderr ?? ""}`;
+  if (/ModelNotFoundError|Requested entity was not found/i.test(text)) {
+    return true;
+  }
+  const errMessage = parsedEnvelope?.error?.message;
+  return typeof errMessage === "string" && /not found|not_found/i.test(errMessage);
+}
+
 function stripAnsi(str) {
   return String(str ?? "").replace(/\x1B\[[0-9;]*[mGKHF]/g, "");
 }
@@ -163,9 +183,32 @@ export async function runGeminiTurn(cwd, options = {}) {
     timeout: spawnTimeoutMs, // hard kill — grace-later than agy's --print-timeout
   });
 
-  const rawStdout = stripAnsi(result.stdout ?? "");
-  const rawStderr = stripAnsi(result.stderr ?? "");
+  let rawStdout = stripAnsi(result.stdout ?? "");
+  let rawStderr = stripAnsi(result.stderr ?? "");
   let exitCode = result.status ?? (result.error ? 1 : 0);
+  let modelFallbackNote = null;
+
+  // Graceful degradation (gemini engine): a requested model id that is not found
+  // (preview/retired, or absent on this CLI version) retries ONCE on the GA
+  // fallback so the task still runs instead of hard-failing. agy has no model
+  // selection so this never applies to it.
+  if (engineInfo.engine === "gemini" && model && model !== GA_FALLBACK_MODEL && isModelNotFoundError(rawStdout, rawStderr, tryParseJsonFromText(rawStdout))) {
+    process.stderr.write(`[gemini-companion] Model '${model}' is unavailable on this gemini CLI (model-not-found); retrying task on GA fallback '${GA_FALLBACK_MODEL}'.\n`);
+    const fbArgs = buildCliArgs("gemini", {
+      prompt,
+      model: GA_FALLBACK_MODEL,
+      write,
+      resumeLast,
+      timeoutMs: spawnTimeoutMs,
+      useStdin,
+      outputJson: useJson,
+    });
+    const fbResult = runCommand(engineInfo.binary, fbArgs, { cwd, input: useStdin ? prompt : undefined, maxBuffer: MAX_BUFFER, timeout: spawnTimeoutMs });
+    rawStdout = stripAnsi(fbResult.stdout ?? "");
+    rawStderr = stripAnsi(fbResult.stderr ?? "");
+    exitCode = fbResult.status ?? (fbResult.error ? 1 : 0);
+    modelFallbackNote = `Requested model '${model}' was unavailable on this gemini CLI; task ran on the GA fallback '${GA_FALLBACK_MODEL}'.`;
+  }
 
   let finalMessage = rawStdout.trim();
   let threadId = null;
@@ -212,6 +255,7 @@ export async function runGeminiTurn(cwd, options = {}) {
     touchedFiles,
     engine: engineInfo.engine,
     stderr: rawStderr,
+    modelFallback: modelFallbackNote,
   };
 }
 
@@ -269,9 +313,33 @@ export async function runGeminiReview(cwd, options = {}) {
     timeout: spawnTimeoutMs, // hard kill — grace-later than agy's --print-timeout
   });
 
-  const rawStdout = stripAnsi(result.stdout ?? "");
-  const rawStderr = stripAnsi(result.stderr ?? "");
+  let rawStdout = stripAnsi(result.stdout ?? "");
+  let rawStderr = stripAnsi(result.stderr ?? "");
   let exitCode = result.status ?? (result.error ? 1 : 0);
+  let modelFallbackNote = null;
+
+  // Graceful degradation (gemini engine): if the requested model id is not found
+  // (preview/retired, or absent on this CLI version — e.g. gemini-3.5-flash on
+  // 0.44.1), retry ONCE on the GA fallback so the user still gets a review
+  // instead of a hard failure — and surface the substitution loudly.
+  if (engineInfo.engine === "gemini" && model && model !== GA_FALLBACK_MODEL && isModelNotFoundError(rawStdout, rawStderr, tryParseJsonFromText(rawStdout))) {
+    process.stderr.write(`[gemini-companion] Model '${model}' is unavailable on this gemini CLI (model-not-found); retrying review on GA fallback '${GA_FALLBACK_MODEL}'.\n`);
+    const fbArgs = buildCliArgs("gemini", {
+      prompt,
+      model: GA_FALLBACK_MODEL,
+      write: false,
+      outputJson: useJson,
+      approvalModePlan: false,
+      timeoutMs: spawnTimeoutMs,
+      useStdin,
+    });
+    const fbResult = runCommand(engineInfo.binary, fbArgs, { cwd, input: useStdin ? prompt : undefined, maxBuffer: MAX_BUFFER, timeout: spawnTimeoutMs });
+    rawStdout = stripAnsi(fbResult.stdout ?? "");
+    rawStderr = stripAnsi(fbResult.stderr ?? "");
+    exitCode = fbResult.status ?? (fbResult.error ? 1 : 0);
+    modelFallbackNote = `Requested model '${model}' was unavailable on this gemini CLI; review ran on the GA fallback '${GA_FALLBACK_MODEL}'.`;
+  }
+
   let reasoningSummary = extractReasoningSummary(rawStderr) ?? null;
 
   let reviewJson = null;
@@ -326,6 +394,7 @@ export async function runGeminiReview(cwd, options = {}) {
     reasoningSummary,
     engine: engineInfo.engine,
     stderr: rawStderr,
+    modelFallback: modelFallbackNote,
   };
 }
 

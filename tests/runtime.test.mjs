@@ -381,6 +381,63 @@ test("review forwards the default gemini model and JSON output flags", () => {
   assert.ok(state.lastInvocation.args.includes("--output-format"));
 });
 
+test("review degrades gracefully to the GA model when the requested model is not found", () => {
+  const { repo, binDir } = setupRepo("review-model-404");
+  commit(repo, "src/app.js", "export const value = 1;\n");
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = 2;\n");
+
+  // gemini-3.5-flash is not served by the gemini CLI (404). The review must not
+  // hard-fail: it retries once on the GA fallback and says so.
+  const result = run("node", [SCRIPT, "review", "--model", "gemini-3.5-flash"], { cwd: repo, env: buildEnv(binDir) });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /# Gemini Review/);
+  assert.match(result.stdout, /Reviewed on the GA fallback model|Fallback-path finding/);
+  // Visible, honest substitution banner (no silent swap).
+  assert.match(result.stdout, /unavailable on this gemini CLI/);
+  assert.match(result.stdout, /gemini-2\.5-flash/);
+
+  const state = readFakeState(binDir);
+  assert.equal(state.invocations.length, 2, "one 404 attempt + one fallback");
+  assert.ok(state.invocations[0].args.includes("gemini-3.5-flash"), "first tries the requested model");
+  assert.ok(state.invocations[1].args.includes("gemini-2.5-flash"), "then retries the GA fallback");
+});
+
+test("rescue task degrades gracefully to the GA model on model-not-found", () => {
+  const { repo, binDir } = setupRepo("review-model-404");
+  commit(repo, "README.md", "hello\n");
+
+  const result = run("node", [SCRIPT, "task", "--model", "gemini-3.5-flash", "do something"], { cwd: repo, env: buildEnv(binDir) });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /unavailable on this gemini CLI/);
+  const state = readFakeState(binDir);
+  assert.equal(state.invocations.length, 2);
+  assert.ok(state.invocations[1].args.includes("gemini-2.5-flash"));
+});
+
+test("review --deep appends agentic exploration guidance to the prompt", () => {
+  const { repo, binDir } = setupRepo("review-clean");
+  commit(repo, "src/app.js", "export const value = 1;\n");
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = 2;\n");
+
+  const result = run("node", [SCRIPT, "review", "--deep"], { cwd: repo, env: buildEnv(binDir) });
+  assert.equal(result.status, 0, result.stderr);
+  const state = readFakeState(binDir);
+  assert.match(state.lastInvocation.prompt, /DEEP REVIEW MODE/);
+});
+
+test("standard review (no --deep) keeps the fast diff-scoped prompt", () => {
+  const { repo, binDir } = setupRepo("review-clean");
+  commit(repo, "src/app.js", "export const value = 1;\n");
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = 2;\n");
+
+  const result = run("node", [SCRIPT, "review"], { cwd: repo, env: buildEnv(binDir) });
+  assert.equal(result.status, 0, result.stderr);
+  const state = readFakeState(binDir);
+  assert.doesNotMatch(state.lastInvocation.prompt, /DEEP REVIEW MODE/);
+});
+
 test("adversarial review renders structured findings", () => {
   const { repo, binDir } = setupRepo("review-findings");
   commit(repo, "src/app.js", "export const value = items[0];\n");
