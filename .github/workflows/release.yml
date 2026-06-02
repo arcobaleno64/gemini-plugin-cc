@@ -31,4 +31,11 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+        run: |
+          notes="$(gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" -f tag_name="$GITHUB_REF_NAME" -q .body)"
+          released_at="$(TZ='Asia/Taipei' date '+%Y-%m-%d %H:%M:%S')"
+          {
+            printf 'Released: %s (UTC+8 台北)\n\n' "$released_at"
+            printf '%s\n' "$notes"
+          } > release-notes.md
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md --verify-tag

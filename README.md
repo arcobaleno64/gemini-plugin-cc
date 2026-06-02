@@ -39,6 +39,8 @@ Ported from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) 
 
 ## Installation
 
+### Latest (tracks `main`, auto-updates)
+
 ```
 # 1. Add the marketplace
 /plugin marketplace add arcobaleno64/gemini-plugin-cc
@@ -49,6 +51,18 @@ Ported from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) 
 # 3. Reload plugins
 /reload-plugins
 ```
+
+### Pinned release (a specific published version)
+
+Pin the marketplace to a release tag — e.g. the latest, `v0.6.0`:
+
+```
+/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.6.0
+/plugin install gemini@gemini-plugin-cc
+/reload-plugins
+```
+
+> Claude Code installs plugins from the git tree, not from GitHub Release tarballs — `@<tag>` selects the git tag behind a [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases). A pinned install does **not** auto-update; to move to a newer release, re-add the marketplace with the new tag (e.g. `…@v0.6.1`).
 
 Then run `/gemini:setup` — it will check whether Gemini CLI is ready. If Gemini is missing and npm is available, it will offer to install it for you.
 
