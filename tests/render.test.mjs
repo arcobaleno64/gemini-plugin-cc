@@ -44,6 +44,19 @@ test("renderSetupReport reports needs-attention when not ready", () => {
   assert.match(out, /- review gate: disabled/);
 });
 
+test("renderSetupReport surfaces model-alias provenance so preview drift is visible", () => {
+  const out = renderSetupReport(
+    setupReport({ modelAliases: { total: 9, preview: 5, lastVerified: "2026-05" } })
+  );
+  // Match the label + structure, not just the date (the date will change over time).
+  assert.match(out, /- model aliases: 9 \(5 preview\), verified 2026-05/);
+});
+
+test("renderSetupReport renders the model-alias line gracefully when data is absent", () => {
+  const out = renderSetupReport(setupReport());
+  assert.match(out, /- model aliases: 0 \(0 preview\), verified unknown/);
+});
+
 test("renderStatusReport shows empty state when there are no jobs", () => {
   const out = renderStatusReport({
     sessionRuntime: { label: "gemini 0.44.1" },

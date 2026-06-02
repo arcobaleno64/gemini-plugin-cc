@@ -25,11 +25,29 @@ function extractTouchedFiles(text) {
   return [...new Set(matches)];
 }
 
+// CLI noise that must never surface as model "reasoning": Node deprecation
+// warnings, terminal-capability notices, and ripgrep fallbacks. Filtered BEFORE
+// the last-N slice so genuine reasoning is not evicted by trailing noise.
+const REASONING_NOISE = [
+  /^\(node:\d+\)/,
+  /DeprecationWarning/i,
+  /\[DEP\d+\]/,
+  /--trace-deprecation/,
+  /256-color support not detected/i,
+  /Using a terminal with at least 256-color/i,
+  /Ripgrep is not available/i,
+  /Falling back to GrepTool/i
+];
+
+function isReasoningNoise(line) {
+  return REASONING_NOISE.some((re) => re.test(line));
+}
+
 function extractReasoningSummary(stderr) {
   const lines = stripAnsi(String(stderr ?? ""))
     .split(/\r?\n/)
     .map((l) => l.trim())
-    .filter(Boolean);
+    .filter((l) => l && !isReasoningNoise(l));
   if (!lines.length) return null;
   return lines.slice(-5).join("\n");
 }
@@ -198,9 +216,11 @@ export async function runGeminiTurn(cwd, options = {}) {
 }
 
 export async function runGeminiReview(cwd, options = {}) {
-  const { prompt, model: requestedModel, engine: requestedEngine, onProgress } = options;
+  const { prompt, model: requestedModel, engine: requestedEngine, isAdversarial = true, onProgress } = options;
 
-  onProgress?.({ message: "Starting adversarial review...", phase: "reviewing" });
+  // Mode-aware label: the standard /review and adversarial /adversarial-review
+  // share this runner, so the progress line must reflect the actual mode.
+  onProgress?.({ message: `Starting ${isAdversarial ? "adversarial review" : "review"}...`, phase: "reviewing" });
 
   // prefer gemini for JSON output, unless forced to agy
   let engineInfo;

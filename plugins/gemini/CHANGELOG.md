@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased — parity-audit follow-up fixes
+
+### Fixed (P0)
+- **`/gemini:rescue` resume prompt never fired.** `handleTaskResumeCandidate` emitted `found`, but `commands/rescue.md` keys the "continue current thread?" prompt off `available` (as upstream codex does). The companion now emits `available` in all branches; a contract guard test asserts `available` is present and the legacy `found` is gone.
+
+### Added (P1)
+- **Persistent background reviews.** `/gemini:review --background` and `/gemini:adversarial-review --background` now enqueue a detached `review-worker` (mirroring `task-worker`) instead of relying on Claude-layer `run_in_background`, so a background review result survives an interrupted session and is retrievable via `/gemini:status` / `/gemini:result`. New `review-worker` subcommand; `enqueueBackgroundJob`/`spawnDetachedWorker`/`runStoredJobWorker` generalize the shared machinery.
+
+### Fixed (P1)
+- **Stop-review-gate is no longer silent on skip.** On review failure / Gemini-unavailable the gate still fails open, but now surfaces a `systemMessage` + stderr warning so the user knows the gate was skipped. It also reviews `--scope working-tree` explicitly (where `--write` task edits live) instead of relying on auto scope.
+- Removed dead `renderNativeReviewResult` from `lib/render.mjs`.
+
+### Fixed (P2)
+- **Standard `/gemini:review` mislabeled its progress as "adversarial review".** `runGeminiReview` is now mode-aware (`isAdversarial`).
+- **CLI noise leaked into the "Reasoning:" output.** `extractReasoningSummary` now drops DEP0190 deprecation, 256-color, and ripgrep-fallback lines before the last-N slice.
+- **Preview-model drift is now visible.** `/gemini:setup` reports the model-alias count, how many resolve to `*-preview` IDs, and the `lastVerified` date.
+
+### Documentation
+- README (EN + zh-TW): clarified that `agy --print` is locked to Gemini 3.5 Flash (High) and ignores `--model`/`--effort` (was incorrectly described as interactive selection); noted the DEP0190 warning is benign; documented that AGY transcript recovery is verified on Windows/Linux only (macOS unverified).
+- Added `skills/gemini-prompting/references/` (blocks, recipes, anti-patterns), matching upstream `gpt-5-4-prompting`.
+
 ## 0.6.0 — 2026-06-01 — parity audit
 
 ### Breaking

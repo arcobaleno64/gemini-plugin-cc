@@ -38,7 +38,7 @@ Argument handling:
 - Preserve the user's arguments exactly.
 - Do not strip `--wait` or `--background` yourself.
 - Do not weaken the adversarial framing or rewrite the user's focus text.
-- The companion script parses `--wait` and `--background`, but Claude Code's `Bash(..., run_in_background: true)` is what actually detaches the run.
+- The companion script handles `--background` itself: it enqueues the review and spawns a detached `review-worker`, so the result persists even if this session ends. Do not use Claude's `run_in_background: true` for it.
 - `/gemini:adversarial-review` uses the same review target selection as `/gemini:review` (including `--base <ref>` and `--scope`).
 - Unlike `/gemini:review`, it can take extra focus text after the flags.
 
@@ -53,13 +53,10 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" adversarial-review "$A
 - If the helper reports that Gemini/AGY is missing or unauthenticated, stop and tell the user to run `/gemini:setup`.
 
 Background flow:
-- Launch the review with `Bash` in the background:
-```typescript
-Bash({
-  command: `node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" adversarial-review "$ARGUMENTS"`,
-  description: "Gemini adversarial review",
-  run_in_background: true
-})
+- Run the companion with its own `--background` flag in the FOREGROUND (the companion detaches its own worker and returns immediately):
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" adversarial-review --background "$ARGUMENTS"
 ```
-- Do not call `BashOutput` or wait for completion in this turn.
-- After launching the command, tell the user: "Gemini adversarial review started in the background. Check `/gemini:status` for progress."
+- This enqueues the review, spawns a detached `review-worker`, and returns a job id right away. The result persists even if this Claude session is interrupted.
+- Do not use `run_in_background: true` and do not call `BashOutput` — the companion already detached; this call returns immediately.
+- Relay the returned job id: "Gemini adversarial review started in the background as `<job-id>`. Check `/gemini:status <job-id>` for progress and `/gemini:result <job-id>` when it finishes."

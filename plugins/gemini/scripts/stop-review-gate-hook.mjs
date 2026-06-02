@@ -33,9 +33,13 @@ function hasCompletedWriteTask(jobs) {
 
 function runAdversarialReview(cwd) {
   try {
+    // The gate fires because a --write task completed; those edits live in the
+    // working tree (the plugin never commits), so review the working tree
+    // explicitly instead of relying on auto scope (which could resolve to an
+    // empty branch diff and pass vacuously).
     const output = execFileSync(
       process.execPath,
-      [COMPANION_SCRIPT, "adversarial-review", "--json"],
+      [COMPANION_SCRIPT, "adversarial-review", "--scope", "working-tree", "--json"],
       { cwd, encoding: "utf8", timeout: GATE_REVIEW_TIMEOUT_MS }
     );
     return JSON.parse(output);
@@ -81,8 +85,14 @@ async function main() {
 
   const payload = runAdversarialReview(cwd);
   if (!payload) {
-    // Review failed or Gemini unavailable — fail open.
-    emitDecision({ decision: "proceed" });
+    // Review failed or Gemini unavailable — fail OPEN (never trap the user at
+    // Stop), but make the skip VISIBLE instead of silent so they know the gate
+    // did not actually run. `systemMessage` surfaces to the user; stderr is a
+    // belt-and-suspenders fallback for hook logs.
+    const warning =
+      "Gemini review gate skipped: the adversarial review could not run (Gemini/AGY unavailable or errored). Run /gemini:adversarial-review --wait before stopping if you changed code.";
+    process.stderr.write(`${warning}\n`);
+    emitDecision({ decision: "proceed", systemMessage: warning });
     return;
   }
 

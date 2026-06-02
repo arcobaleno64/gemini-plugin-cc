@@ -189,7 +189,7 @@ When enabled and the review returns `needs-attention`, Claude Code is blocked fr
 - Aliases and effort tiers live in a single source of truth — `plugins/gemini/scripts/lib/model-map.mjs` — and `npm test` verifies the table above against it, so the two cannot drift.
 - **Effort mapping** (applied when `--effort` is given without `--model`): `none`/`minimal` → `gemini-2.5-flash-lite`; `low`/`medium` → `gemini-3-flash-preview`; `high`/`xhigh` → `gemini-3.1-pro-preview`.
 - **Preview IDs may change.** Model IDs ending in `-preview` track Google's preview channel (last verified against gemini CLI 0.44.1). If an alias stops resolving, override it with `--model <exact-id>` — any value that is not a known alias is passed through to the CLI unchanged.
-- **AGY ignores `--model` and `--effort`.** AGY selects its model and reasoning tier interactively; the plugin prints a note and ignores both flags when `--engine agy` is active.
+- **AGY ignores `--model` and `--effort`.** `agy --print` is locked to Gemini 3.5 Flash (High) and exposes no model/effort selection; the plugin prints a note and ignores both flags when `--engine agy` is active.
 
 ---
 
@@ -202,7 +202,9 @@ In `auto` mode the plugin selects the first available engine in this order:
 
 Override via `--engine` flag or the `GEMINI_ENGINE` environment variable.
 
-> `--model` and `--effort` apply to the **gemini** engine only. AGY selects its model and tier interactively, so the plugin ignores `--model`/`--effort` when `--engine agy` is active.
+> `--model` and `--effort` apply to the **gemini** engine only. `agy --print` is locked to Gemini 3.5 Flash (High) and has no model/effort flag, so the plugin ignores `--model`/`--effort` when `--engine agy` is active.
+
+> **AGY transcript recovery is platform-verified on Windows and Linux only.** Because `agy --print` does not pipe its output (upstream [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466)), the plugin recovers AGY responses from the on-disk "brain" transcript under `~/.gemini/antigravity-cli/brain` (Windows 1.0.3, verified) or `~/.antigravity-cli/brain` (Linux 1.0.2, reported). **macOS is unverified** — its brain path is unknown, so `--engine agy` may fail to start on macOS. If you run AGY on macOS, please open an issue with the actual brain directory so the path can be added.
 
 ---
 
@@ -210,6 +212,7 @@ Override via `--engine` flag or the `GEMINI_ENGINE` environment variable.
 
 - **Stdin delivery (gemini engine)**: For the `gemini` engine, prompts are passed via `stdin` (Node's `spawnSync` `input` option) and never interpolated into a shell string, eliminating shell-injection risk regardless of prompt content. The `agy` engine has no stdin mode and receives the prompt as a CLI argument, so prefer the default `gemini` engine for untrusted input.
 - **Windows `.cmd` wrappers**: npm installs `gemini`/`agy` as `.cmd` shims, which require `shell: true` to launch. Because the gemini prompt travels on stdin (never in argv), `shell: true` never exposes it to `cmd.exe` parsing — only controlled flags (model id, `--yolo`, …) are ever placed in argv.
+- **DEP0190 warning is benign**: On Windows you may see `(node:NNN) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.` This is **safe to ignore here** — the deprecation is about *prompt content* placed in argv under `shell: true`, but this plugin never does that for the gemini engine: the prompt travels on stdin, and only controlled flags reach argv (each validated, e.g. model ids must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`). The warning is Node flagging the general pattern, not an actual injection vector in this code path.
 - **AGY positional prompt**: AGY has no stdin mode, so under `--engine agy` the prompt is passed as a positional CLI argument and, on Windows, is subject to `cmd.exe` quoting. **Do not route untrusted prompt content through `--engine agy`** — prefer the default `gemini` engine.
 - **Credential handling**: OAuth credentials in `~/.gemini/oauth_creds.json` are read only to check token expiry via `getGeminiLoginStatus()`; they are never logged, copied elsewhere, or transmitted by this plugin.
 - **`.gitignore`**: The `.omc/` state directory (job logs, session state) is excluded from version control.
@@ -226,6 +229,7 @@ Override via `--engine` flag or the `GEMINI_ENGINE` environment variable.
 | setup shows `… token expired` | OAuth token lapsed | Run `!gemini` again to refresh credentials |
 | `Status: partial (AGY fallback only …)` | Gemini CLI unavailable but AGY present | Install Gemini CLI, or use `--engine agy` (its auth cannot be verified) |
 | Windows: command resolves but fails | `.cmd` wrapper / PATH | Confirm `where gemini` resolves; the plugin spawns bare names through `shell: true` to find `.cmd` shims |
+| `--engine agy` fails to start on macOS | AGY brain path unverified on macOS | Transcript recovery is verified on Windows/Linux only; on macOS, confirm the `agy` brain directory and open an issue with its location |
 
 To authenticate, run **`!gemini`** once — the plugin completes OAuth by invoking `gemini` itself. There is **no** `gemini login` subcommand. `setup` reports `ready: true` only when Node **and** the Gemini CLI are present **and** OAuth is valid; an installed-but-unauthenticated Gemini is reported as *not ready*.
 
@@ -245,7 +249,7 @@ Claude Code
             └─ renderTaskResult()   → Markdown output to Claude
 ```
 
-Background mode spawns a detached `task-worker` child process and returns a job ID immediately. State is persisted in `.omc/state/` and polled via `/gemini:status`.
+Background mode spawns a detached worker child process (`task-worker` for `/gemini:rescue`, `review-worker` for `/gemini:review` and `/gemini:adversarial-review`) and returns a job ID immediately. State is persisted in `.omc/state/` and polled via `/gemini:status`, so a background result survives even if the Claude session is interrupted.
 
 ---
 

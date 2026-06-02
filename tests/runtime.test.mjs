@@ -561,6 +561,64 @@ test("task --background enqueues a detached worker and reports completion", asyn
   assert.match(result.stdout, /Handled the requested task/);
 });
 
+test("review --background enqueues a detached review-worker and persists the result", async () => {
+  const { repo, binDir } = setupRepo("review-clean");
+  commit(repo, "src/app.js", "export const value = 1;\n");
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = 2;\n");
+
+  const launched = run("node", [SCRIPT, "review", "--background", "--json"], {
+    cwd: repo,
+    env: buildEnv(binDir)
+  });
+  assert.equal(launched.status, 0, launched.stderr);
+  const launchPayload = JSON.parse(launched.stdout);
+  assert.equal(launchPayload.status, "queued");
+  assert.match(launchPayload.jobId, /^review-/);
+
+  const waited = run(
+    "node",
+    [SCRIPT, "status", launchPayload.jobId, "--wait", "--timeout-ms", "15000", "--json"],
+    { cwd: repo, env: buildEnv(binDir) }
+  );
+  assert.equal(waited.status, 0, waited.stderr);
+  const waitedPayload = JSON.parse(waited.stdout);
+  assert.equal(waitedPayload.job.id, launchPayload.jobId);
+  assert.equal(waitedPayload.job.status, "completed");
+
+  // The persisted result is retrievable after the worker exits — the whole point
+  // of having a review-worker instead of Claude-layer run_in_background.
+  const result = run("node", [SCRIPT, "result", launchPayload.jobId], { cwd: repo, env: buildEnv(binDir) });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /# Gemini Review/);
+});
+
+test("adversarial-review --background serializes focus text through the worker", async () => {
+  const { repo, binDir } = setupRepo("review-findings");
+  commit(repo, "src/app.js", "export const value = items[0];\n");
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = items[0].id;\n");
+
+  const launched = run(
+    "node",
+    [SCRIPT, "adversarial-review", "--background", "--json", "challenge the retry design"],
+    { cwd: repo, env: buildEnv(binDir) }
+  );
+  assert.equal(launched.status, 0, launched.stderr);
+  const launchPayload = JSON.parse(launched.stdout);
+  assert.match(launchPayload.jobId, /^review-/);
+
+  const waited = run(
+    "node",
+    [SCRIPT, "status", launchPayload.jobId, "--wait", "--timeout-ms", "15000", "--json"],
+    { cwd: repo, env: buildEnv(binDir) }
+  );
+  assert.equal(waited.status, 0, waited.stderr);
+  assert.equal(JSON.parse(waited.stdout).job.status, "completed");
+
+  // Focus text survives the JSON write/read cycle and reaches the model prompt.
+  const state = readFakeState(binDir);
+  assert.match(state.lastInvocation.prompt, /challenge the retry design/);
+});
+
 // ---------------------------------------------------------------------------
 // status / result / cancel / task-resume-candidate (seeded state)
 // ---------------------------------------------------------------------------
@@ -772,7 +830,7 @@ test("task-resume-candidate returns the latest completed task thread", () => {
 
   assert.equal(result.status, 0, result.stderr);
   const payload = JSON.parse(result.stdout);
-  assert.equal(payload.found, true);
+  assert.equal(payload.available, true);
   assert.equal(payload.threadId, "thr_recent");
 });
 
@@ -783,7 +841,7 @@ test("task-resume-candidate reports nothing to resume on an empty workspace", ()
   const result = run("node", [SCRIPT, "task-resume-candidate", "--json"], { cwd: workspace });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(JSON.parse(result.stdout).found, false);
+  assert.equal(JSON.parse(result.stdout).available, false);
 });
 
 test("task-resume-candidate is blocked while a task is still running", () => {
@@ -805,8 +863,34 @@ test("task-resume-candidate is blocked while a task is still running", () => {
 
   assert.equal(result.status, 0, result.stderr);
   const payload = JSON.parse(result.stdout);
-  assert.equal(payload.found, false);
+  assert.equal(payload.available, false);
   assert.equal(payload.blocked, true);
+});
+
+// Contract guard: commands/rescue.md keys the resume prompt off `available`.
+// The payload must expose `available` (not the legacy `found`) so the documented
+// contract and the companion output cannot drift apart again.
+test("task-resume-candidate exposes `available` and not the legacy `found` field", () => {
+  const workspace = makeTempDir();
+  seedState(workspace, [
+    {
+      id: "task-recent",
+      status: "completed",
+      jobClass: "task",
+      kindLabel: "rescue",
+      title: "Gemini Task",
+      threadId: "thr_recent",
+      summary: "Investigate flaky test",
+      createdAt: "2026-03-18T15:30:00.000Z",
+      updatedAt: "2026-03-18T15:31:00.000Z"
+    }
+  ]);
+
+  const payload = JSON.parse(
+    run("node", [SCRIPT, "task-resume-candidate", "--json"], { cwd: workspace, env: envWithoutSession() }).stdout
+  );
+  assert.equal(payload.available, true, "rescue.md reads `available`");
+  assert.ok(!Object.prototype.hasOwnProperty.call(payload, "found"), "legacy `found` field must be gone");
 });
 
 // ---------------------------------------------------------------------------
@@ -856,7 +940,7 @@ test("task-resume-candidate prefers the current session over a newer other-sessi
   const env = { ...process.env, GEMINI_COMPANION_SESSION_ID: "sess-current" };
 
   const payload = JSON.parse(run("node", [SCRIPT, "task-resume-candidate", "--json"], { cwd: workspace, env }).stdout);
-  assert.equal(payload.found, true);
+  assert.equal(payload.available, true);
   assert.equal(payload.threadId, "thr_task-current");
 });
 
@@ -866,7 +950,7 @@ test("task-resume-candidate hides other-session threads by default", () => {
   const env = { ...process.env, GEMINI_COMPANION_SESSION_ID: "sess-current" };
 
   const payload = JSON.parse(run("node", [SCRIPT, "task-resume-candidate", "--json"], { cwd: workspace, env }).stdout);
-  assert.equal(payload.found, false);
+  assert.equal(payload.available, false);
 });
 
 // Fail closed: when no current session id is known (lifecycle hook never ran),
@@ -881,7 +965,7 @@ test("task-resume-candidate fails closed when the session id is unset and jobs a
   ]);
 
   const payload = JSON.parse(run("node", [SCRIPT, "task-resume-candidate", "--json"], { cwd: workspace, env: envWithoutSession() }).stdout);
-  assert.equal(payload.found, false);
+  assert.equal(payload.available, false);
 });
 
 test("status hides other-session jobs when the session id is unset (but --all still surfaces them)", () => {
