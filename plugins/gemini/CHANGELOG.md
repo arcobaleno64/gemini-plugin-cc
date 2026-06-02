@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.3 — 2026-06-02 — reasoning-noise filter fix
+
+### Fixed
+- **True-color terminal warning leaked into review "Reasoning:".** `REASONING_NOISE` (`lib/gemini.mjs`) only matched the `256-color` terminal-capability warning, but gemini CLI 0.44.1 emits the `True color (24-bit) support not detected` variant. That line matched none of the patterns, so `extractReasoningSummary` kept it and it surfaced as a bogus model-reasoning bullet in review output. Added a `/true color/i` pattern. (The DEP0190 lines seen alongside it during diagnosis were the parent process's own deprecation warning surfaced via a `2>&1` redirect, **not** a filter failure — the v0.6.1 DEP0190 filter works correctly on the subprocess stderr it targets.)
+
+### Tests
+- Extended the `review-noisy` fixture/test: it now emits the true-color line on stderr and asserts genuine reasoning still surfaces (`Considering empty-state`) while the true-color warning is filtered out. 166 tests pass.
+
 ## 0.6.2 — 2026-06-02 — model resilience, agentic review, transparency
 
 ### Added

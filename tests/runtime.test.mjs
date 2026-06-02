@@ -1178,6 +1178,10 @@ test("review parses cleanly even when gemini writes reasoning noise to stderr", 
   assert.match(result.stdout, /Missing empty-state guard/);
   // ...and the reasoning is surfaced separately, not mixed into the JSON.
   assert.match(result.stdout, /Reasoning:/);
+  // ...genuine reasoning survives the noise filter...
+  assert.match(result.stdout, /Considering empty-state/);
+  // ...but the terminal-capability (true-color) warning is filtered out of it.
+  assert.doesNotMatch(result.stdout, /True color/i);
 });
 
 // ---------------------------------------------------------------------------

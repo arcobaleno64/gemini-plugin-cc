@@ -6,13 +6,13 @@
   },
   "metadata": {
     "description": "Gemini/AGY companion plugin for Claude Code — delegate tasks, adversarial reviews, and rescue. Mirrors openai/codex-plugin-cc with Google Gemini.",
-    "version": "0.6.2"
+    "version": "0.6.3"
   },
   "plugins": [
     {
       "name": "gemini",
       "description": "Gemini/AGY companion plugin — delegation, adversarial review, rescue agent",
-      "version": "0.6.2",
+      "version": "0.6.3",
       "author": {
         "name": "arcobaleno64"
       },
