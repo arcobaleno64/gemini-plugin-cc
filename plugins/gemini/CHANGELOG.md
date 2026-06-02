@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.2 — 2026-06-02 — model resilience, agentic review, transparency
+
+### Added
+- **Graceful model-not-found fallback.** If a requested model id is not served by the local gemini CLI (a preview/retired id, or CLI-version skew — e.g. `gemini-3.5-flash` returns 404 on CLI 0.44.1), the plugin retries the run **once** on the GA fallback `gemini-2.5-flash` and shows a visible banner instead of hard-failing. Applies to `/gemini:review`, `/gemini:adversarial-review`, and `/gemini:rescue`; the AGY path is unaffected. (`lib/gemini.mjs`)
+- **`--deep` agentic review.** `/gemini:review` and `/gemini:adversarial-review` accept `--deep`, which invites Gemini to use its read-only tools to inspect repo context beyond the diff (dependency manifests, untracked files, callers) before producing the same JSON findings — closing the harness gap versus a native agentic reviewer. The default stays the fast, diff-scoped single-shot review (no behavior change). Verified live: `--deep` flags an undeclared dependency that the diff-scoped review cannot see.
+- **Stop-review-gate hook test coverage** (3 deterministic tests: disabled → silent; enabled with no write task → proceed; review-failure → fail-open with a visible warning).
+- **`docs/MODEL_COMPARISON.md`** — empirical model-vs-harness comparison and the local model-availability reality; **`docs/PARITY_AUDIT_v0.6.1.md`** — the v0.6.1 re-score.
+
+### Changed
+- `model-map`: `lite3` → `gemini-3.1-flash-lite` (verified GA id; drops the `-preview` suffix). Metadata records that Gemini 3.5 is GA on the API but not served by the gemini CLI 0.44.1 (reach it via AGY).
+- README (EN + zh-TW): added a 2026-06-18 free-CLI-sunset heads-up, the Gemini 3.5 availability reality (CLI 404 → use AGY), the graceful-fallback note, and `--deep` documentation — so user expectations match reality.
+
+### Tests
+- 159 → 166 (model-not-found fallback for review + rescue; `--deep` prompt injection on/off; stop-gate hook coverage).
+
 ## 0.6.1 — 2026-06-02 — parity-audit follow-up fixes
 
 ### Fixed (P0)
