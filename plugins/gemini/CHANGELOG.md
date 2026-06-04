@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.4 — 2026-06-04 — empty-diff review guard
+
+### Fixed
+- **Background review of a clean/empty diff no longer passes vacuously.** `executeReviewRun` now short-circuits when the resolved review target has no changes — a working tree with nothing staged/unstaged/untracked, or a branch diff with no commits and an empty patch — returning an explicit `empty: true` / `result: null` payload rendered as `Nothing to review — <target> has no changes.` instead of asking Gemini to review an empty diff (which it rubber-stamps as "approved"). This closes the v0.6.1-audit gap where a detached `--background` review re-resolved the diff at run time and, if the tree was clean when the worker started, silently persisted a vacuous approve only visible at `/gemini:result`. The foreground and background paths share `executeReviewRun`, so both are covered, and the stop-review-gate stays non-blocking on an empty result (`result: null` → verdict is not `needs-attention`). New `isEmpty` flag on the working-tree/branch review context. (`lib/git.mjs`, `gemini-companion.mjs`)
+
+### Tests
+- 166 → 168: an empty working tree review surfaces "nothing to review" without invoking Gemini (the fake-gemini state file is never written); a `--json` empty review carries `empty:true` / `result:null` so the gate proceeds. The pre-existing "adversarial review forwards focus text" test now diverges onto a feature branch so `--base main` resolves to a non-empty diff — it previously exercised the empty-branch-diff path this fix targets.
+
 ## 0.6.3 — 2026-06-02 — reasoning-noise filter fix
 
 ### Fixed
