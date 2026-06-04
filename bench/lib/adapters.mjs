@@ -68,9 +68,25 @@ function fail(reason) {
   return { ok: false, error: reason, findings: [] };
 }
 
+function geminiInnerText(envelope, fallback) {
+  // gemini --output-format json wraps the text differently across CLI versions
+  // (mirrors lib/gemini.mjs): { response: "..." } | { response: { text } } |
+  // { candidates[0].content.parts[0].text } | { text }.
+  if (!envelope) return fallback;
+  return (
+    envelope?.response?.text ??
+    (typeof envelope?.response === "string" ? envelope.response : null) ??
+    envelope?.candidates?.[0]?.content?.parts?.[0]?.text ??
+    envelope?.text ??
+    fallback
+  );
+}
+
 function runGeminiModel(promptText) {
   return timed(() => {
-    const res = spawnSync("gemini", ["-p", "--output-format", "json"], {
+    // gemini 0.45 reads the prompt from stdin when -p has no value; omit -p (as the
+    // plugin's buildCliArgs does for useStdin) and deliver the prompt via input.
+    const res = spawnSync("gemini", ["--output-format", "json"], {
       input: promptText,
       encoding: "utf8",
       timeout: TIMEOUT_MS,
@@ -78,9 +94,8 @@ function runGeminiModel(promptText) {
     });
     if (res.error) return fail(`gemini spawn: ${res.error.message}`);
     const envelope = extractJsonObject(res.stdout);
-    // gemini wraps the model text in { response: "<text>" }; the text is our JSON.
-    const review = normalizeReview(extractJsonObject(envelope?.response ?? res.stdout));
-    if (!review) return fail("gemini: could not parse review JSON");
+    const review = normalizeReview(extractJsonObject(geminiInnerText(envelope, res.stdout)));
+    if (!review) return fail(`gemini: could not parse review JSON (${(res.stderr || "").slice(0, 160)})`);
     return { ok: true, ...review, raw: res.stdout?.slice(0, 4000) };
   });
 }
@@ -136,4 +151,4 @@ export function runCell(cell, ctx) {
   }
 }
 
-export const _internal = { extractJsonObject, normalizeReview };
+export const _internal = { extractJsonObject, normalizeReview, geminiInnerText };

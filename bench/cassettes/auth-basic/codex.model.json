@@ -1,50 +1,41 @@
 {
   "caseId": "auth-basic",
   "cell": "codex.model",
-  "source": "seeded-from-docs/MODEL_COMPARISON.md#A (refresh with --live)",
+  "recordedAt": "2026-06-04T14:08:20.842Z",
   "verdict": "needs-attention",
-  "summary": "Auth defects plus a missing token expiry.",
-  "latencyMs": 12400,
+  "summary": "Authentication code introduces exploitable SQL injection and unsafe secret handling.",
   "findings": [
     {
       "severity": "critical",
-      "title": "SQL injection via string concatenation",
-      "body": "The query concatenates username into SQL, enabling injection.",
+      "title": "SQL injection in user lookup",
+      "body": "findUser builds the SQL statement by concatenating username directly into the WHERE clause, so crafted input can alter the query and bypass or exfiltrate user data.",
       "file": "src/auth.js",
-      "line_start": 7,
-      "line_end": 9,
-      "confidence": 0.96,
-      "recommendation": "Use parameterized queries."
+      "line_start": 6,
+      "line_end": 8,
+      "confidence": 0.98,
+      "recommendation": "Use a parameterized query or the project's query builder, e.g. pass username as a bound parameter instead of interpolating it."
     },
     {
       "severity": "high",
-      "title": "Hard-coded secret",
-      "body": "JWT_SECRET is hard-coded in the source file.",
+      "title": "JWT signing secret is hardcoded",
+      "body": "JWT_SECRET is committed as a literal string, so every deployment using this code shares a known signing key; anyone with source access can forge valid tokens.",
       "file": "src/auth.js",
       "line_start": 4,
       "line_end": 4,
-      "confidence": 0.94,
-      "recommendation": "Move the secret to configuration/secret storage."
-    },
-    {
-      "severity": "high",
-      "title": "Plaintext password equality check",
-      "body": "Password compared with == in plain text rather than a hashed, constant-time comparison.",
-      "file": "src/auth.js",
-      "line_start": 15,
-      "line_end": 15,
-      "confidence": 0.9,
-      "recommendation": "Compare a securely hashed password."
+      "confidence": 0.96,
+      "recommendation": "Load the signing secret from a secure environment/config secret and fail startup if it is missing or too weak."
     },
     {
       "severity": "medium",
-      "title": "JWT issued without expiry",
-      "body": "jwt.sign is called without expiresIn, so issued tokens never expire — a session-management risk.",
+      "title": "Missing user existence handling",
+      "body": "login dereferences user.password without checking whether findUser returned a user, causing an exception for unknown usernames instead of a controlled authentication failure.",
       "file": "src/auth.js",
-      "line_start": 16,
+      "line_start": 12,
       "line_end": 16,
-      "confidence": 0.86,
-      "recommendation": "Set expiresIn and validate it on verify."
+      "confidence": 0.9,
+      "recommendation": "Return null when no user is found before reading password, and keep error behavior consistent for invalid credentials."
     }
-  ]
+  ],
+  "latencyMs": 32382,
+  "raw": "{\"verdict\":\"needs-attention\",\"summary\":\"Authentication code introduces exploitable SQL injection and unsafe secret handling.\",\"findings\":[{\"severity\":\"critical\",\"title\":\"SQL injection in user lookup\",\"body\":\"findUser builds the SQL statement by concatenating username directly into the WHERE clause, so crafted input can alter the query and bypass or exfiltrate user data.\",\"file\":\"src/auth.js\",\"line_start\":6,\"line_end\":8,\"confidence\":0.98,\"recommendation\":\"Use a parameterized query or the project's query builder, e.g. pass username as a bound parameter instead of interpolating it.\"},{\"severity\":\"high\",\"title\":\"JWT signing secret is hardcoded\",\"body\":\"JWT_SECRET is committed as a literal string, so every deployment using this code shares a known signing key; anyone with source access can forge valid tokens.\",\"file\":\"src/auth.js\",\"line_start\":4,\"line_end\":4,\"confidence\":0.96,\"recommendation\":\"Load the signing secret from a secure environment/config secret and fail startup if it is missing or too weak.\"},{\"severity\":\"medium\",\"title\":\"Missing user existence handling\",\"body\":\"login dereferences user.password without checking whether findUser returned a user, causing an exception for unknown usernames instead of a controlled authentication failure.\",\"file\":\"src/auth.js\",\"line_start\":12,\"line_end\":16,\"confidence\":0.9,\"recommendation\":\"Return null when no user is found before reading password, and keep error behavior consistent for invalid credentials.\"}],\"next_steps\":[\"Parameterize the database lookup.\",\"Move JWT_SECRET to managed secret configuration.\",\"Handle missing users before password checks.\"]}\n"
 }

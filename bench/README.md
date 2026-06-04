@@ -47,10 +47,22 @@ The scorecard prints to stdout and is written to `bench/results/scorecard.md`
 - Model output is non-deterministic — use `--repeats N` to average; treat
   single-digit composite gaps as noise.
 
-> The committed cassettes are **seeded** from `docs/MODEL_COMPARISON.md` (real
-> observations) and plausible agentic runs, so `npm run bench` tells a faithful
-> story out of the box. Each cassette records its `source`. Run `--live` to replace
-> them with fresh measurements on your machine.
+### Cassette provenance & live-refresh status
+
+A cassette recorded from a real run carries `recordedAt` and no `source`; a seeded
+one carries a `source` field. Current committed state:
+
+- **Model cells (`*.model`) — live-recorded** (2026-06-04, gemini 0.45 / codex-cli
+  0.137, single sample). On this corpus the real single-shot result was Gemini-ahead
+  on the model axis (Codex hallucinated a false positive on `repo-context` and missed
+  more in-diff defects). Single samples are noisy — re-run with `--repeats N`.
+- **Agentic cells (`gemini.deep`, `codex.native`) — still seeded.** They could not be
+  driven headlessly in this environment: `gemini --deep` exits non-zero with empty
+  stdout under headless agentic+JSON mode (tool approvals need a TTY), and the
+  `codex.native` app-server review exceeded the 180s cap. Refresh them with a longer
+  `BENCH_TIMEOUT_MS`, an interactive/approved session, or on a platform where the
+  agentic harness runs non-interactively. Until then the harness-axis numbers come
+  from the `MODEL_COMPARISON.md`-grounded seeds.
 
 ## Scoring (`lib/score.mjs`, pure & unit-tested)
 
