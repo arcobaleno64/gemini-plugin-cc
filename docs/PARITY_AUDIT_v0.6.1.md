@@ -51,7 +51,7 @@ No regressions vs v0.6.0. The critic flagged gaps that **temper** the optimistic
 | Sev | Concern | Note |
 |---|---|---|
 | Med-High | **stop-gate hook untested in the v0.6.1 release** | The gate logic is rewritten (visible fail-open, working-tree scope) but has no dedicated unit test in v0.6.1. *(A 3-test cover exists in the unmerged PR #7 / this branch.)* |
-| Medium | **Background review of a clean tree passes vacuously** | `review-worker` re-resolves the diff at run time; if the tree is clean when the worker starts, the review runs on an empty diff and silently approves. Foreground shows this immediately; background hides it until `/result`. |
+| Medium | **Background review of a clean tree passes vacuously** | `review-worker` re-resolves the diff at run time; if the tree is clean when the worker starts, the review runs on an empty diff and silently approves. Foreground shows this immediately; background hides it until `/result`. **✅ Resolved in v0.6.4** — `executeReviewRun` now short-circuits an empty target. |
 | Low | **Reasoning noise filter `/\[DEP\d+\]/` is broad** | Filters before the last-N slice (genuine reasoning is preserved), but could strip legitimate bracketed tokens if the Gemini CLI ever emits them. |
 | Low | **Cancel of a bg review logs "Cancelled" unconditionally** | Detached worker is `unref()`-ed; if its PID is stale, `terminateProcessTree` no-ops but the log still says cancelled. UX, not functional. |
 | Low | **Multi-line focus-text in bg review untested** | JSON serialization is safe; no test covers it. |
@@ -63,7 +63,7 @@ No regressions vs v0.6.0. The critic flagged gaps that **temper** the optimistic
 ## Suggested v0.6.2 candidates
 
 1. Merge the stop-gate hook tests (PR #7) so the gate ships tested.
-2. Background review of a clean/empty diff: surface "nothing to review" in the persisted result instead of a vacuous approve.
+2. ~~Background review of a clean/empty diff: surface "nothing to review" in the persisted result instead of a vacuous approve.~~ **✅ Resolved in v0.6.4** — `executeReviewRun` short-circuits an empty review target (empty working tree or empty branch diff) with an explicit `empty:true` / `result:null` "nothing to review" payload, covering both the foreground and background (`review-worker`) paths; the stop-gate stays non-blocking on the empty result. See [CHANGELOG](../plugins/gemini/CHANGELOG.md) 0.6.4.
 3. (Optional) Narrow the `[DEP\d+]` noise regex to stderr-preamble context; add a multi-line focus-text background test.
 
 ---

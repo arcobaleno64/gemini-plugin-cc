@@ -293,8 +293,8 @@ Three skills are bundled for Claude Code to consume:
 | Skill | Purpose |
 |---|---|
 | `gemini-cli-runtime` | Runtime contract — how to call `gemini-companion task` |
-| `gemini-prompting` | Prompt composition guide (XML tags, output contract) |
 | `gemini-result-handling` | Result presentation rules (severity, reasoning, evidence) |
+| `gemini-prompting` | Prompt composition guide (XML tags, output contract) |
 
 ---
 
