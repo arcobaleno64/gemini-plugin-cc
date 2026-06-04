@@ -192,6 +192,8 @@ function collectWorkingTreeContext(cwd, state) {
 
   return {
     mode: "working-tree",
+    isEmpty:
+      state.staged.length === 0 && state.unstaged.length === 0 && state.untracked.length === 0,
     summary: `Reviewing ${state.staged.length} staged, ${state.unstaged.length} unstaged, and ${state.untracked.length} untracked file(s).`,
     content: parts.join("\n")
   };
@@ -207,6 +209,7 @@ function collectBranchContext(cwd, baseRef) {
 
   return {
     mode: "branch",
+    isEmpty: diff.trim() === "" && logOutput === "",
     summary: `Reviewing branch ${currentBranch} against ${baseRef} from merge-base ${mergeBase}.`,
     content: [
       formatSection("Commit Log", logOutput),

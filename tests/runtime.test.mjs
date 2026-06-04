@@ -326,6 +326,39 @@ test("review honors --scope working-tree even when the tree is clean", () => {
   assert.match(result.stdout, /Target: working tree diff/);
 });
 
+test("review surfaces 'nothing to review' on an empty working tree without invoking Gemini", () => {
+  const { repo, binDir } = setupRepo("review-clean");
+  commit(repo, "src/app.js", "export const value = 1;\n");
+  // Clean tree + explicit working-tree scope: there is no diff to review.
+
+  const result = run("node", [SCRIPT, "review", "--scope", "working-tree"], { cwd: repo, env: buildEnv(binDir) });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Nothing to review/i);
+  // The vacuous-approve bug: Gemini must NOT be asked to review an empty diff.
+  assert.ok(
+    !fs.existsSync(path.join(binDir, "fake-gemini-state.json")),
+    "Gemini must not be invoked when there is nothing to review"
+  );
+});
+
+test("empty-diff review --json marks empty:true with a null result so the gate does not block", () => {
+  const { repo, binDir } = setupRepo("review-clean");
+  commit(repo, "src/app.js", "export const value = 1;\n");
+
+  const result = run("node", [SCRIPT, "adversarial-review", "--scope", "working-tree", "--json"], {
+    cwd: repo,
+    env: buildEnv(binDir)
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.empty, true);
+  assert.equal(payload.result, null);
+  // result.verdict is undefined (not "needs-attention"), so stop-review-gate proceeds.
+  assert.notEqual(payload.result?.verdict, "needs-attention");
+});
+
 test("review honors --scope branch even when the tree is dirty", () => {
   const { repo, binDir } = setupRepo("review-clean");
   commit(repo, "src/app.js", "export const value = 1;\n");
@@ -354,7 +387,10 @@ test("standard review ignores trailing focus text", () => {
 test("adversarial review keeps focus text out of flag parsing and forwards it", () => {
   const { repo, binDir } = setupRepo("review-findings");
   commit(repo, "src/app.js", "export const value = items[0];\n");
-  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = items[0].id;\n");
+  // Diverge from main so --base main resolves to a non-empty branch diff (an
+  // empty diff would now short-circuit as "nothing to review" before the model).
+  run("git", ["checkout", "-b", "feature"], { cwd: repo });
+  commit(repo, "src/app.js", "export const value = items[0].id;\n");
 
   const result = run(
     "node",

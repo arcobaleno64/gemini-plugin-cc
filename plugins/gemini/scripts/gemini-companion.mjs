@@ -359,6 +359,35 @@ async function executeReviewRun(request) {
     scope: request.scope
   });
   const context = collectReviewContext(request.cwd, target);
+
+  // Nothing-to-review guard: if the resolved target has no changes, short-circuit
+  // instead of asking Gemini to review an empty diff (which it rubber-stamps as
+  // "approved"). This matters most for a detached --background review, where the
+  // worker re-resolves the diff at run time and a now-clean tree would otherwise
+  // persist a vacuous approve that only surfaces at /gemini:result.
+  if (context.isEmpty) {
+    const targetLabel = context.target?.label ?? "the requested scope";
+    const message = `Nothing to review — ${targetLabel} has no changes.`;
+    return {
+      exitStatus: 0,
+      threadId: null,
+      turnId: null,
+      engine: null,
+      payload: {
+        review: reviewName,
+        target: context.target,
+        empty: true,
+        gemini: null,
+        result: null
+      },
+      rendered: `# Gemini ${reviewName}\n\nTarget: ${targetLabel}\n\n${message}\n`,
+      summary: message,
+      jobTitle: `Gemini ${reviewName}`,
+      jobClass: "review",
+      targetLabel
+    };
+  }
+
   const template = loadPromptTemplate(ROOT_DIR, templateName);
   const basePrompt = interpolateTemplate(template, {
     TARGET_LABEL: context.target.label,
