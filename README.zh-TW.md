@@ -296,6 +296,16 @@ Claude Code
 
 ---
 
+## 已知限制
+
+以下為已記錄之非阻塞限制——詳見所連結之章節：
+
+- **macOS 之 AGY 未驗證。** AGY transcript 恢復僅於 Windows／Linux 驗證；macOS 之「brain」路徑未知，故 `--engine agy` 於其上或無法啟動。`gemini` 引擎不受影響。詳見 [引擎路由](#引擎路由)。
+- **gemini CLI 不提供 Gemini 3.5，且免費 CLI 於 2026-06-18 終止。** `gemini-3.5-*` 於 CLI 0.44.1 回 404（改走 AGY）；不被提供之 model id 會優雅降級至 GA fallback `gemini-2.5-flash`。2026-06-18 後免費／個人版 CLI 層級終止。詳見 [模型別名說明](#模型別名說明) 與 [docs/MODEL_COMPARISON.md](docs/MODEL_COMPARISON.md)。
+- **`/gemini:review` 為 prompt／CLI adapter，非原生審查器。** 其將 diff 連同審查 prompt 送出並解析結構化 JSON，而非透過 app-server 審查器，故反饋深度有別於原生。詳見 [Codex app server 與 Gemini CLI adapter](#codex-app-server-與-gemini-cli-adapter)。
+
+---
+
 ## 更新日誌
 
 詳見 [CHANGELOG.md](plugins/gemini/CHANGELOG.md)。
