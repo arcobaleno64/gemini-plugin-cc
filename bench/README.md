@@ -1,0 +1,112 @@
+# bench — codex vs gemini review benchmark
+
+A reproducible harness that pits **Codex** and **Gemini** against each other on
+code review, scored automatically against planted ground truth. It operationalizes
+the manual comparison in [`docs/MODEL_COMPARISON.md`](../docs/MODEL_COMPARISON.md):
+the interesting question is **model vs harness**, so the benchmark measures both.
+
+## Two axes, four cells
+
+Both tools emit the **same** structured review JSON (see
+[`review-output.schema.json`](review-output.schema.json), identical to the gemini
+`prompts/review.md` contract and the codex `schemas/review-output.schema.json`), so
+one scorer grades both.
+
+| Cell | What it is | Isolates |
+|---|---|---|
+| `gemini.model` | `gemini -p` on a neutral prompt + embedded diff, tools forbidden | model (single-shot) |
+| `codex.model` | `codex exec --output-schema …` on the same neutral prompt + diff | model (single-shot) |
+| `gemini.deep` | `gemini-companion review --deep` (agentic repo exploration) | harness |
+| `codex.native` | codex's native agentic reviewer via its companion | harness |
+
+- **Model axis** = `gemini.model` vs `codex.model` (same prompt, no tools).
+- **Harness axis** = `gemini.deep` vs `codex.native` (each tool's repo-exploring reviewer).
+- **Harness lift** = within a tool, `model → agentic` composite delta.
+
+## Running
+
+```bash
+npm run bench            # deterministic replay from cassettes — no auth, no network
+npm run bench:live       # run the real CLIs and re-record cassettes (needs auth)
+
+# narrow it down
+node bench/run-bench.mjs --case auth-basic --cell gemini.model
+node bench/run-bench.mjs --live --repeats 3
+```
+
+The scorecard prints to stdout and is written to `bench/results/scorecard.md`
+(+ `scorecard.json`). `results/` is gitignored.
+
+### `--live` requirements
+
+- `gemini` on PATH and authenticated (`gemini` once for OAuth) for the gemini cells.
+- `codex` on PATH and authenticated for `codex.model`.
+- For `codex.native`, set `BENCH_CODEX_COMPANION` to the installed codex plugin's
+  `scripts/codex-companion.mjs`. If unset, that cell is **skipped** (marked in the
+  scorecard), not failed.
+- Model output is non-deterministic — use `--repeats N` to average; treat
+  single-digit composite gaps as noise.
+
+> The committed cassettes are **seeded** from `docs/MODEL_COMPARISON.md` (real
+> observations) and plausible agentic runs, so `npm run bench` tells a faithful
+> story out of the box. Each cassette records its `source`. Run `--live` to replace
+> them with fresh measurements on your machine.
+
+## Scoring (`lib/score.mjs`, pure & unit-tested)
+
+Per cell, findings are matched against the case's `ground-truth.json`:
+
+- A finding **matches** a planted defect when the file matches and a category
+  keyword is present (keyword is the robust signal; an exact line overlap is the
+  fallback for keyword-less defects). `file: "*"` means keyword-only (for defects
+  that span files, e.g. an undeclared dependency).
+- Each finding is assigned to its **single best** unmatched planted defect, so two
+  line-adjacent defects are never double-counted.
+- `recall` = planted found / planted total. `precision` = relevant / findings.
+- A finding matching none of the planted set but listed in `allowed_extras` is a
+  **bonus** (a legitimate unique catch), not a false positive. Everything else
+  unmatched is a **false positive**.
+- `severityExactRate` compares reported vs expected severity on found defects.
+- `composite` (0–100) = `recall*70 + precision*20 + severityExact*10` — a summary,
+  not a verdict. Always read the columns.
+
+`node --test bench/run-bench.test.mjs` (also part of `npm test`) pins the scorer on
+synthetic findings with known precision/recall.
+
+## Corpus format
+
+```
+corpus/<case-id>/
+  base/                 # committed baseline (optional)
+  head/                 # changed working tree (the code under review)
+  ground-truth.json     # planted defects + allowed_extras
+  prompt.md             # optional neutral-prompt override for the model cells
+```
+
+`ground-truth.json`:
+
+```json
+{
+  "planted": [
+    { "id": "sqli", "category": "injection", "file": "src/auth.js",
+      "line_start": 7, "line_end": 9, "severity": "critical",
+      "match": { "keywords": ["sql injection", "concatenat"] } }
+  ],
+  "allowed_extras": [
+    { "id": "jwt-expiry", "file": "src/auth.js", "match": { "keywords": ["expiresin"] } }
+  ]
+}
+```
+
+Seeded cases:
+- **`auth-basic`** — five in-diff defects (the `MODEL_COMPARISON.md §A` set); probes
+  the **model axis** (everything is visible in the diff).
+- **`repo-context`** — an undeclared dependency and a committed runtime-state file;
+  invisible single-shot, so it probes the **harness axis** (`MODEL_COMPARISON.md §B`).
+
+### Adding a case
+
+1. Create `corpus/<id>/head/...` (and `base/...` for a real diff) with the defects.
+2. Write `corpus/<id>/ground-truth.json` (give every planted defect keywords).
+3. `node bench/run-bench.mjs --live --case <id>` to record cassettes, or hand-author
+   `cassettes/<id>/<cell>.json` for deterministic runs.

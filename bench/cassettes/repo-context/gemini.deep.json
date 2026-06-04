@@ -1,0 +1,20 @@
+{
+  "caseId": "repo-context",
+  "cell": "gemini.deep",
+  "source": "seeded illustrative (refresh with --live)",
+  "verdict": "needs-attention",
+  "summary": "src/token.js uses an undeclared dependency.",
+  "latencyMs": 27300,
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Undeclared jsonwebtoken dependency",
+      "body": "src/token.js requires 'jsonwebtoken' but it is not declared in package.json dependencies, so a clean install will fail at runtime.",
+      "file": "package.json",
+      "line_start": 1,
+      "line_end": 1,
+      "confidence": 0.9,
+      "recommendation": "Add jsonwebtoken to package.json dependencies."
+    }
+  ]
+}

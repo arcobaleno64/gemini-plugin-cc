@@ -1,0 +1,25 @@
+{
+  "title": "repo-context — defects only an agentic reviewer can see",
+  "notes": "Both defects require reading files outside the diff (package.json, repo hygiene). A single-shot review over the diff cannot find them; this case probes the harness axis (docs/MODEL_COMPARISON.md §B). file is \"*\" so a finding citing any file matches on keyword.",
+  "planted": [
+    {
+      "id": "missing-dependency",
+      "category": "build",
+      "file": "*",
+      "line_start": 1,
+      "line_end": 1,
+      "severity": "high",
+      "match": { "keywords": ["jsonwebtoken", "undeclared", "not declared", "missing dependency", "not listed", "not in package.json"] }
+    },
+    {
+      "id": "committed-state",
+      "category": "hygiene",
+      "file": "*",
+      "line_start": 1,
+      "line_end": 1,
+      "severity": "medium",
+      "match": { "keywords": [".omc/state", "runtime state", "should not be committed", "gitignore", "should be ignored", "untracked state"] }
+    }
+  ],
+  "allowed_extras": []
+}

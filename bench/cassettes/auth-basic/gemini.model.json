@@ -1,0 +1,50 @@
+{
+  "caseId": "auth-basic",
+  "cell": "gemini.model",
+  "source": "seeded-from-docs/MODEL_COMPARISON.md#A (refresh with --live)",
+  "verdict": "needs-attention",
+  "summary": "Multiple security and correctness defects in auth.js.",
+  "latencyMs": 9100,
+  "findings": [
+    {
+      "severity": "critical",
+      "title": "SQL injection in findUser",
+      "body": "username is concatenated directly into the SQL query string, allowing SQL injection.",
+      "file": "src/auth.js",
+      "line_start": 7,
+      "line_end": 9,
+      "confidence": 0.97,
+      "recommendation": "Use a parameterized query with bound parameters."
+    },
+    {
+      "severity": "high",
+      "title": "Hardcoded JWT secret",
+      "body": "JWT_SECRET is hard-coded in source; anyone with the repo can forge tokens.",
+      "file": "src/auth.js",
+      "line_start": 4,
+      "line_end": 4,
+      "confidence": 0.95,
+      "recommendation": "Load the secret from an environment variable or secret store."
+    },
+    {
+      "severity": "high",
+      "title": "Plaintext password comparison",
+      "body": "Passwords are compared in plaintext with ==; should hash with bcrypt and compare in constant time.",
+      "file": "src/auth.js",
+      "line_start": 15,
+      "line_end": 15,
+      "confidence": 0.9,
+      "recommendation": "Store and compare a bcrypt/argon2 hash."
+    },
+    {
+      "severity": "high",
+      "title": "Unguarded JSON.parse",
+      "body": "JSON.parse(raw) is unguarded and throws on malformed input, crashing parseSession.",
+      "file": "src/auth.js",
+      "line_start": 22,
+      "line_end": 22,
+      "confidence": 0.88,
+      "recommendation": "Wrap JSON.parse in try/catch and validate the shape."
+    }
+  ]
+}

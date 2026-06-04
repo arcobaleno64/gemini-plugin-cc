@@ -1,0 +1,9 @@
+{
+  "caseId": "repo-context",
+  "cell": "gemini.model",
+  "source": "seeded illustrative (refresh with --live)",
+  "verdict": "approve",
+  "summary": "Nothing material visible in the diff alone.",
+  "latencyMs": 6800,
+  "findings": []
+}
