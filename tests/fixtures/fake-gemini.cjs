@@ -127,9 +127,13 @@ function respond(prompt) {
   if (SCENARIO === "review-noisy") {
     // Reasoning/thought noise on stderr must NOT pollute the stdout JSON parse.
     // The terminal-capability warning (true-color variant emitted by gemini CLI
-    // 0.44.1) must be filtered out of the Reasoning section, not surfaced as it.
+    // 0.44.1) and the Node deprecation preamble must be filtered out of the
+    // Reasoning section, not surfaced as it.
     process.stderr.write("Warning: True color (24-bit) support not detected. Using a terminal with true color enabled will result in a better visual experience.\n");
-    process.stderr.write("Considering empty-state edge cases...\nReasoning complete.\n");
+    process.stderr.write("(node:12345) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities.\n");
+    // Genuine reasoning that merely contains a bracketed [DEPnn] token must survive
+    // the narrowed noise filter.
+    process.stderr.write("Considering empty-state edge cases...\nCross-checking [DEP12] handling in the retry path.\nReasoning complete.\n");
   }
 
   const response = buildResponse();

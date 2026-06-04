@@ -434,7 +434,19 @@ export function renderStoredJobResult(job, storedJob) {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
-export function renderCancelReport(job) {
+// Human-readable outcome of terminateProcessTree(), so /gemini:cancel can be
+// honest about whether a live process was actually killed. The detached worker
+// is unref()-ed, so by cancel time its PID is often already gone.
+export function describeTermination(termination) {
+  if (!termination || termination.attempted !== true) {
+    return "no live process was attached";
+  }
+  return termination.delivered
+    ? "terminated the running process"
+    : "no live process (it had already exited)";
+}
+
+export function renderCancelReport(job, termination) {
   const lines = [
     "# Gemini Cancel",
     "",
@@ -448,6 +460,7 @@ export function renderCancelReport(job) {
   if (job.summary) {
     lines.push(`- Summary: ${job.summary}`);
   }
+  lines.push(`- Process: ${describeTermination(termination)}`);
   lines.push("- Check `/gemini:status` for the updated queue.");
 
   return `${lines.join("\n").trimEnd()}\n`;

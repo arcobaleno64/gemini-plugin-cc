@@ -51,7 +51,10 @@ function extractTouchedFiles(text) {
 const REASONING_NOISE = [
   /^\(node:\d+\)/,
   /DeprecationWarning/i,
-  /\[DEP\d+\]/,
+  // Narrowed to Node's canonical `(node:NNN) [DEPxxx]` preamble so a genuine
+  // reasoning line that merely contains a bracketed `[DEP12]`-style token is not
+  // stripped as noise (lines are trimmed before this test, so ^ is safe).
+  /^\(node:\d+\)\s+\[DEP\d+\]/,
   /--trace-deprecation/,
   /256-color support not detected/i,
   /Using a terminal with at least 256-color/i,

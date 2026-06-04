@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.5 — 2026-06-04 — low-severity cleanup
+
+### Fixed
+- **`/gemini:cancel` no longer claims a kill it did not make.** The detached worker is `unref()`-ed, so by cancel time its PID is often already gone; `handleCancel` discarded `terminateProcessTree`'s return value and always logged "Cancelled by user." It now reports the real outcome — `terminated the running process`, `no live process (it had already exited)`, or `no live process was attached` — in the log, the `# Gemini Cancel` report (a new `- Process:` line), and a new `processTerminated` field on the `--json` payload. The job is still marked `cancelled` in every case (the user's intent is recorded). New shared `describeTermination` helper. (`gemini-companion.mjs`, `lib/render.mjs`)
+- **Narrowed the reasoning-noise `[DEP\d+]` filter.** `REASONING_NOISE` matched a bare `[DEP12]` token anywhere, which could strip a genuine reasoning line that merely contained such a bracket. It now requires Node's canonical `(node:NNN) [DEPxxx]` preamble, so real deprecation warnings are still filtered while legitimate reasoning survives. (`lib/gemini.mjs`)
+
+### Tests
+- 168 → 172: honest `/cancel` outcome (render-level wording for all three states + a no-pid integration case asserting `processTerminated:false`), the narrowed DEP filter (a `[DEP12]` reasoning line survives while a real `(node:…) [DEP0190]` line is filtered), and a multi-line focus-text round-trip through the background `review-worker`.
+
+### Documentation
+- README (EN + zh-TW): added a **Known limitations** section consolidating the documented, non-blocking constraints (macOS AGY unverified, Gemini 3.5 not served by the CLI + 2026-06-18 free-CLI sunset, `/review` prompt-adapter vs native reviewer) with cross-links to the detailed sections.
+
 ## 0.6.4 — 2026-06-04 — empty-diff review guard
 
 ### Fixed

@@ -713,6 +713,40 @@ test("adversarial-review --background serializes focus text through the worker",
   assert.match(state.lastInvocation.prompt, /challenge the retry design/);
 });
 
+test("adversarial-review --background preserves multi-line focus text through the worker", async () => {
+  const { repo, binDir } = setupRepo("review-findings");
+  commit(repo, "src/app.js", "export const value = items[0];\n");
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = items[0].id;\n");
+
+  const focus = "challenge the retry design\nand the backoff jitter";
+  // Launch node by absolute path so the test's own shell (shell:true for a bare
+  // "node" on Windows) cannot split the newline before it reaches the companion;
+  // we are asserting the companion's JSON round-trip, not the OS shell.
+  const launched = run(
+    process.execPath,
+    [SCRIPT, "adversarial-review", "--background", "--json", focus],
+    { cwd: repo, env: buildEnv(binDir) }
+  );
+  assert.equal(launched.status, 0, launched.stderr);
+  const launchPayload = JSON.parse(launched.stdout);
+  assert.match(launchPayload.jobId, /^review-/);
+
+  const waited = run(
+    "node",
+    [SCRIPT, "status", launchPayload.jobId, "--wait", "--timeout-ms", "15000", "--json"],
+    { cwd: repo, env: buildEnv(binDir) }
+  );
+  assert.equal(waited.status, 0, waited.stderr);
+  assert.equal(JSON.parse(waited.stdout).job.status, "completed");
+
+  // The embedded newline must survive JSON serialization through the stored job.
+  const state = readFakeState(binDir);
+  assert.ok(
+    state.lastInvocation.prompt.includes("challenge the retry design\nand the backoff jitter"),
+    "multi-line focus text must reach the model prompt intact"
+  );
+});
+
 // ---------------------------------------------------------------------------
 // status / result / cancel / task-resume-candidate (seeded state)
 // ---------------------------------------------------------------------------
@@ -902,6 +936,36 @@ test("cancel stops an active job and marks it cancelled", async (t) => {
 
   const state = JSON.parse(fs.readFileSync(path.join(resolveStateDir(workspace), "state.json"), "utf8"));
   assert.equal(state.jobs.find((job) => job.id === "task-live").status, "cancelled");
+});
+
+test("cancel is honest when there is no live process to terminate", () => {
+  const workspace = makeTempDir();
+  // A detached worker is unref()-ed, so by cancel time its PID is often gone.
+  // Seed a job with no pid: terminateProcessTree never attempts a kill.
+  seedState(workspace, [
+    {
+      id: "task-stale",
+      status: "running",
+      jobClass: "task",
+      kindLabel: "rescue",
+      title: "Gemini Task",
+      pid: null,
+      createdAt: "2026-03-18T15:30:00.000Z"
+    }
+  ]);
+  writeJobFile(workspace, "task-stale", { id: "task-stale", status: "running", pid: null });
+
+  const result = run("node", [SCRIPT, "cancel", "task-stale", "--json"], { cwd: workspace, env: envWithoutSession() });
+
+  assert.equal(result.status, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  // The job is still marked cancelled (intent recorded), but the result must not
+  // claim a process was killed.
+  assert.equal(payload.status, "cancelled");
+  assert.equal(payload.processTerminated, false);
+
+  const state = JSON.parse(fs.readFileSync(path.join(resolveStateDir(workspace), "state.json"), "utf8"));
+  assert.equal(state.jobs.find((job) => job.id === "task-stale").status, "cancelled");
 });
 
 test("task-resume-candidate returns the latest completed task thread", () => {
@@ -1216,8 +1280,13 @@ test("review parses cleanly even when gemini writes reasoning noise to stderr", 
   assert.match(result.stdout, /Reasoning:/);
   // ...genuine reasoning survives the noise filter...
   assert.match(result.stdout, /Considering empty-state/);
-  // ...but the terminal-capability (true-color) warning is filtered out of it.
+  // ...including a real reasoning line that merely contains a bracketed [DEPnn]
+  // token (the narrowed noise regex must not strip it)...
+  assert.match(result.stdout, /Cross-checking \[DEP12\] handling/);
+  // ...but the terminal-capability (true-color) warning and the genuine Node
+  // deprecation preamble are filtered out of it.
   assert.doesNotMatch(result.stdout, /True color/i);
+  assert.doesNotMatch(result.stdout, /DEP0190/);
 });
 
 // ---------------------------------------------------------------------------

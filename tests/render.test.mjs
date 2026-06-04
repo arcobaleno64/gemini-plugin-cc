@@ -7,6 +7,7 @@ import {
   renderJobStatusReport,
   renderTaskResult,
   renderCancelReport,
+  describeTermination,
   renderStoredJobResult
 } from "../plugins/gemini/scripts/lib/render.mjs";
 
@@ -99,10 +100,38 @@ test("renderTaskResult falls back to a failure message when there is no output",
 });
 
 test("renderCancelReport confirms cancellation and points at status", () => {
-  const out = renderCancelReport({ id: "task-7", title: "Big task", summary: "wip" });
+  const out = renderCancelReport(
+    { id: "task-7", title: "Big task", summary: "wip" },
+    { attempted: true, delivered: true, method: "process-group" }
+  );
   assert.match(out, /# Gemini Cancel/);
   assert.match(out, /Cancelled task-7\./);
+  assert.match(out, /- Process: terminated the running process/);
   assert.match(out, /\/gemini:status/);
+});
+
+test("describeTermination is honest about whether a live process was killed", () => {
+  assert.equal(
+    describeTermination({ attempted: true, delivered: true }),
+    "terminated the running process"
+  );
+  assert.equal(
+    describeTermination({ attempted: true, delivered: false }),
+    "no live process (it had already exited)"
+  );
+  // Non-finite pid path: terminateProcessTree returns attempted:false.
+  assert.equal(describeTermination({ attempted: false, delivered: false }), "no live process was attached");
+  assert.equal(describeTermination(undefined), "no live process was attached");
+});
+
+test("renderCancelReport does not claim a kill when the process had already exited", () => {
+  const out = renderCancelReport(
+    { id: "review-9" },
+    { attempted: true, delivered: false, method: "taskkill" }
+  );
+  assert.match(out, /Cancelled review-9\./);
+  assert.match(out, /- Process: no live process \(it had already exited\)/);
+  assert.doesNotMatch(out, /terminated the running process/);
 });
 
 test("renderStoredJobResult prefers the structured rendered review output", () => {

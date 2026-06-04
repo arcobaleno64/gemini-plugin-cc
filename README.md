@@ -298,6 +298,16 @@ Three skills are bundled for Claude Code to consume:
 
 ---
 
+## Known limitations
+
+Documented, non-blocking constraints — see the linked sections for detail:
+
+- **macOS AGY is unverified.** AGY transcript recovery is verified on Windows/Linux only; the macOS "brain" path is unknown, so `--engine agy` may not start there. The `gemini` engine is unaffected. See [Engine Routing](#engine-routing).
+- **Gemini 3.5 is not served by the gemini CLI, and the free CLI sunsets 2026-06-18.** `gemini-3.5-*` returns 404 on CLI 0.44.1 (reach it via AGY); a requested id that is not served degrades gracefully to the GA fallback `gemini-2.5-flash`. After 2026-06-18 the free/personal CLI tier ends. See [Model Alias Notes](#model-alias-notes) and [docs/MODEL_COMPARISON.md](docs/MODEL_COMPARISON.md).
+- **`/gemini:review` is a prompt/CLI adapter, not a native reviewer.** It sends the diff with a review prompt and parses the structured JSON, rather than using an app-server reviewer, so its feedback depth differs from a native one. See [Codex app server vs Gemini CLI adapter](#codex-app-server-vs-gemini-cli-adapter).
+
+---
+
 ## Changelog
 
 See [CHANGELOG.md](plugins/gemini/CHANGELOG.md).

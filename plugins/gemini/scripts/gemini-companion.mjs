@@ -45,6 +45,7 @@ import {
   renderTaskResult,
   renderStoredJobResult,
   renderCancelReport,
+  describeTermination,
   renderJobStatusReport,
   renderSetupReport,
   renderStatusReport
@@ -924,8 +925,11 @@ async function handleCancel(argv) {
   const { workspaceRoot, job } = resolveCancelableJob(cwd, reference, { all: options.all });
   const existing = readStoredJob(workspaceRoot, job.id) ?? {};
 
-  terminateProcessTree(job.pid ?? Number.NaN);
-  appendLogLine(job.logFile, "Cancelled by user.");
+  // Be honest about whether a live process was actually killed: the detached
+  // worker is unref()-ed, so by cancel time its PID may already be gone. The job
+  // is still marked cancelled (the user's intent is recorded) in every case.
+  const termination = terminateProcessTree(job.pid ?? Number.NaN);
+  appendLogLine(job.logFile, `Cancelled by user — ${describeTermination(termination)}.`);
 
   const completedAt = nowIso();
   const nextJob = {
@@ -954,10 +958,11 @@ async function handleCancel(argv) {
   const payload = {
     jobId: job.id,
     status: "cancelled",
-    title: job.title
+    title: job.title,
+    processTerminated: termination.delivered
   };
 
-  outputCommandResult(payload, renderCancelReport(nextJob), options.json);
+  outputCommandResult(payload, renderCancelReport(nextJob, termination), options.json);
 }
 
 async function main() {
