@@ -14,7 +14,7 @@
 - **`/gemini:setup`** — 檢查 Gemini CLI / AGY 的可用性與 OAuth 狀態。
 - **`/gemini:status`** — 查看作用中與已完成的背景工作。
 - **`/gemini:result`** / **`/gemini:cancel`** — 取得或取消背景工作。
-- **引擎自動偵測** — 優先使用 `gemini` CLI（支援 pipe 輸出）；回退至 `agy`。
+- **引擎自動偵測** — 優先使用 `gemini` CLI（支援 pipe 輸出）；備援退回至 `agy`。
 - **Stdin 提示傳遞** — 提示透過 stdin 傳入，消除 Windows `.cmd` wrapper 問題與 shell injection 風險。
 - **會話生命週期掛鉤** — 自動注入 `GEMINI_COMPANION_SESSION_ID`；會話結束時清理殘留工作。
 
@@ -34,7 +34,7 @@
 **認證**：執行一次 `gemini` 完成 OAuth 登入。不需要 API 金鑰。
 
 > **重要提示（貼近現實）：**
-> - **2026-06-18**：免費／個人版 gemini CLI 存取終止。之後 **gemini** 引擎需付費 Gemini Code Assist Standard/Enterprise tier;**AGY**（`--engine agy`）成為免費途徑。
+> - **2026-06-18**：免費／個人版 gemini CLI 存取終止。之後 **gemini** 引擎需付費 Gemini Code Assist Standard/Enterprise tier；**AGY**（`--engine agy`）成為免費途徑。
 > - **Gemini 3.5**（Flash/Pro）已在 API GA，但 **gemini CLI 0.44.1（最新）並不提供**——會回 404。請改走 **AGY** 引擎（固定模型）。若所請求 id 不可用，外掛會優雅降級至 GA 模型。詳見 [模型別名](#模型別名) 與 [docs/MODEL_COMPARISON.md](docs/MODEL_COMPARISON.md)。
 
 ---
@@ -64,7 +64,7 @@
 /reload-plugins
 ```
 
-> Claude Code 從 git tree 安裝外掛，**並非**從 GitHub Releases 的 tarball——`@<tag>` 選的是 [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases) 背後的 git 標籤。釘版安裝**不會**自動更新;欲升至新版，請以新標籤重新加入 marketplace（例如 `…@v0.6.1`）。
+> Claude Code 從 git tree 安裝外掛，**並非**從 GitHub Releases 的 tarball——`@<tag>` 選的是 [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases) 背後的 git 標籤。釘版安裝**不會**自動更新；欲升至新版，請以新標籤重新加入 marketplace（例如 `…@v0.6.1`）。
 
 接著執行 `/gemini:setup`——若 Gemini CLI 尚未安裝且 npm 可用，指令會提供自動安裝選項。
 
@@ -118,7 +118,7 @@
 | 旗標 | 說明 |
 |---|---|
 | `--wait` / `--background` | 前景或分離執行 |
-| `--deep` | Agentic 審查——讓 Gemini 探查 diff 以外的 repo 脈絡（較慢、較耗 token;gemini 引擎） |
+| `--deep` | Agentic 審查——讓 Gemini 探查 diff 以外的 repo 脈絡（較慢、較耗 token；gemini 引擎） |
 | `--base <ref>` | 與特定 git ref 比較 |
 | `--scope <auto\|working-tree\|branch>` | Diff 範圍 |
 | `--engine <gemini\|agy\|auto>` | 覆蓋引擎 |
@@ -130,7 +130,7 @@
 
 | 旗標 | 說明 |
 |---|---|
-| `--deep` | Agentic 審查——讓 Gemini 探查 diff 以外的 repo 脈絡（較慢、較耗 token;gemini 引擎） |
+| `--deep` | Agentic 審查——讓 Gemini 探查 diff 以外的 repo 脈絡（較慢、較耗 token；gemini 引擎） |
 | `--base <ref>` | 與特定 git ref 比較 |
 | `--scope <auto\|working-tree\|branch>` | Diff 範圍 |
 | `--engine <gemini\|agy\|auto>` | 覆蓋引擎 |
@@ -193,7 +193,7 @@
 - 別名與努力等級集中於單一來源——`plugins/gemini/scripts/lib/model-map.mjs`——且 `npm test` 會以其驗證上表，二者不致漂移。
 - **努力對映**（於提供 `--effort` 但未給 `--model` 時套用）：`none`/`minimal` → `gemini-2.5-flash-lite`；`low`/`medium` → `gemini-3-flash-preview`；`high`/`xhigh` → `gemini-3.1-pro-preview`。
 - **Preview ID 可能變動。** 以 `-preview` 結尾之 model ID 追隨 Google 的 preview channel（最後驗證於 gemini CLI 0.44.1）。若某別名無法解析，以 `--model <精確 ID>` 覆蓋——任何非已知別名之值將原樣透傳給 CLI。
-- **Gemini 3.5 尚未上 CLI。** `gemini-3.5-flash` 與 `gemini-3.5-pro` 已在 Gemini API GA，但 **gemini CLI 0.44.1（目前最新）並不提供**——會回 `404 ModelNotFound`。欲用 Gemini 3.5 Flash，請改走 **AGY 引擎**（`--engine agy`，由其固定執行;無 `--model`/`--effort` 選擇）。
+- **Gemini 3.5 尚未上 CLI。** `gemini-3.5-flash` 與 `gemini-3.5-pro` 已在 Gemini API GA，但 **gemini CLI 0.44.1（目前最新）並不提供**——會回 `404 ModelNotFound`。欲用 Gemini 3.5 Flash，請改走 **AGY 引擎**（`--engine agy`，由其固定執行；無 `--model`/`--effort` 選擇）。
 - **模型優雅降級。** 若所請求之 model id 在你的 gemini CLI 上找不到（preview/已退役 id，或 CLI 版本落差），外掛會**以 GA fallback `gemini-2.5-flash` 重試一次**並印出明確提示——讓過時 id 優雅降級，而非硬性失敗。
 - **AGY 忽略 `--model` 與 `--effort`。** `agy --print` 鎖定 Gemini 3.5 Flash（High）、無模型／努力選擇；`--engine agy` 時外掛會印出提示並忽略此二旗標。
 
@@ -291,8 +291,8 @@ Claude Code
 | 技能 | 用途 |
 |---|---|
 | `gemini-cli-runtime` | 執行時合約 — 如何呼叫 `gemini-companion task` |
-| `gemini-prompting` | 提示組合指南（XML 標籤、輸出合約） |
 | `gemini-result-handling` | 結果呈現規則（嚴重程度、推理、證據邊界） |
+| `gemini-prompting` | 提示組合指南（XML 標籤、輸出合約） |
 
 ---
 
