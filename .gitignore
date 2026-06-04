@@ -3,6 +3,14 @@
 plugins/gemini/.omc/
 plugins/gemini/scripts/lib/*.log
 
+# ...but bench corpus fixtures intentionally include an .omc/state file (a planted
+# "runtime state should not be committed" defect), so keep those tracked.
+!bench/corpus/**/.omc/
+!bench/corpus/**/.omc/**
+
+# Generated benchmark scorecards
+bench/results/
+
 # OS artifacts
 .DS_Store
 Thumbs.db

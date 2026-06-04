@@ -1,0 +1,58 @@
+{
+  "title": "auth.js — five in-diff security/correctness defects",
+  "notes": "Mirrors the seeded set in docs/MODEL_COMPARISON.md §A. All defects are visible in the diff (no repo context needed), so this case probes single-shot model quality.",
+  "planted": [
+    {
+      "id": "sqli",
+      "category": "injection",
+      "file": "src/auth.js",
+      "line_start": 7,
+      "line_end": 9,
+      "severity": "critical",
+      "match": { "keywords": ["sql injection", "injection", "parameteriz", "concatenat"] }
+    },
+    {
+      "id": "hardcoded-secret",
+      "category": "secrets",
+      "file": "src/auth.js",
+      "line_start": 4,
+      "line_end": 4,
+      "severity": "high",
+      "match": { "keywords": ["hardcoded", "hard-coded", "hard coded", "secret in source", "jwt_secret"] }
+    },
+    {
+      "id": "null-check",
+      "category": "error-handling",
+      "file": "src/auth.js",
+      "line_start": 14,
+      "line_end": 15,
+      "severity": "medium",
+      "match": { "keywords": ["null check", "null-check", "undefined", "may be null", "user could be", "missing check"] }
+    },
+    {
+      "id": "plaintext-compare",
+      "category": "auth",
+      "file": "src/auth.js",
+      "line_start": 15,
+      "line_end": 15,
+      "severity": "high",
+      "match": { "keywords": ["plaintext", "plain text", "hash", "bcrypt", "constant-time", "timing attack"] }
+    },
+    {
+      "id": "json-parse",
+      "category": "error-handling",
+      "file": "src/auth.js",
+      "line_start": 22,
+      "line_end": 22,
+      "severity": "high",
+      "match": { "keywords": ["json.parse", "unguarded", "try/catch", "throws", "malformed"] }
+    }
+  ],
+  "allowed_extras": [
+    {
+      "id": "jwt-expiry",
+      "file": "src/auth.js",
+      "match": { "keywords": ["expiresin", "no expiry", "expiration", "token lifetime", "never expire"] }
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "caseId": "repo-context",
+  "cell": "codex.native",
+  "source": "seeded illustrative (refresh with --live)",
+  "verdict": "needs-attention",
+  "summary": "Undeclared dependency and a committed runtime-state file.",
+  "latencyMs": 41500,
+  "findings": [
+    {
+      "severity": "high",
+      "title": "jsonwebtoken is not declared in package.json",
+      "body": "src/token.js requires jsonwebtoken, but package.json does not list it under dependencies; the build is not reproducible.",
+      "file": "package.json",
+      "line_start": 1,
+      "line_end": 1,
+      "confidence": 0.92,
+      "recommendation": "Declare jsonwebtoken in dependencies."
+    },
+    {
+      "severity": "medium",
+      "title": "Runtime state file committed",
+      "body": ".omc/state/job.json is runtime state that should not be committed; it should be gitignored.",
+      "file": ".omc/state/job.json",
+      "line_start": 1,
+      "line_end": 1,
+      "confidence": 0.83,
+      "recommendation": "Remove it and add .omc/ to .gitignore."
+    }
+  ]
+}

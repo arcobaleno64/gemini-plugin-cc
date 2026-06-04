@@ -1,0 +1,60 @@
+{
+  "caseId": "auth-basic",
+  "cell": "gemini.deep",
+  "source": "seeded illustrative (refresh with --live)",
+  "verdict": "needs-attention",
+  "summary": "All five seeded defects flagged.",
+  "latencyMs": 24600,
+  "findings": [
+    {
+      "severity": "critical",
+      "title": "SQL injection in findUser",
+      "body": "username concatenated into the SQL string allows injection.",
+      "file": "src/auth.js",
+      "line_start": 7,
+      "line_end": 9,
+      "confidence": 0.97,
+      "recommendation": "Use parameterized queries."
+    },
+    {
+      "severity": "high",
+      "title": "Hardcoded JWT secret",
+      "body": "JWT_SECRET is hard-coded in source.",
+      "file": "src/auth.js",
+      "line_start": 4,
+      "line_end": 4,
+      "confidence": 0.95,
+      "recommendation": "Load from environment/secret store."
+    },
+    {
+      "severity": "medium",
+      "title": "Missing null check on user",
+      "body": "findUser may return undefined; user.password then dereferences null/undefined and throws.",
+      "file": "src/auth.js",
+      "line_start": 14,
+      "line_end": 15,
+      "confidence": 0.85,
+      "recommendation": "Guard for a missing user before accessing fields."
+    },
+    {
+      "severity": "high",
+      "title": "Plaintext password comparison",
+      "body": "Password compared with == in plaintext; hash with bcrypt and use a constant-time compare.",
+      "file": "src/auth.js",
+      "line_start": 15,
+      "line_end": 15,
+      "confidence": 0.9,
+      "recommendation": "Use hashed, constant-time comparison."
+    },
+    {
+      "severity": "high",
+      "title": "Unguarded JSON.parse",
+      "body": "JSON.parse(raw) throws on malformed input and is unguarded.",
+      "file": "src/auth.js",
+      "line_start": 22,
+      "line_end": 22,
+      "confidence": 0.88,
+      "recommendation": "Wrap in try/catch and validate."
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "caseId": "auth-basic",
+  "cell": "codex.native",
+  "source": "seeded illustrative (refresh with --live)",
+  "verdict": "needs-attention",
+  "summary": "Four seeded defects plus the missing token expiry.",
+  "latencyMs": 38200,
+  "findings": [
+    {
+      "severity": "critical",
+      "title": "SQL injection in findUser",
+      "body": "username concatenated into the SQL query enables injection.",
+      "file": "src/auth.js",
+      "line_start": 7,
+      "line_end": 9,
+      "confidence": 0.97,
+      "recommendation": "Use parameterized queries."
+    },
+    {
+      "severity": "high",
+      "title": "Hard-coded JWT secret",
+      "body": "JWT_SECRET is hard-coded in source.",
+      "file": "src/auth.js",
+      "line_start": 4,
+      "line_end": 4,
+      "confidence": 0.95,
+      "recommendation": "Load from a secret store."
+    },
+    {
+      "severity": "medium",
+      "title": "Possible null dereference on user",
+      "body": "user may be undefined when findUser finds no row; accessing user.password could be null/undefined.",
+      "file": "src/auth.js",
+      "line_start": 14,
+      "line_end": 15,
+      "confidence": 0.84,
+      "recommendation": "Check for a missing user first."
+    },
+    {
+      "severity": "high",
+      "title": "Plaintext password comparison",
+      "body": "Passwords compared in plaintext with ==; should be a hashed, constant-time compare.",
+      "file": "src/auth.js",
+      "line_start": 15,
+      "line_end": 15,
+      "confidence": 0.9,
+      "recommendation": "Hash with bcrypt/argon2."
+    },
+    {
+      "severity": "medium",
+      "title": "JWT issued without expiry",
+      "body": "jwt.sign lacks expiresIn, so tokens never expire.",
+      "file": "src/auth.js",
+      "line_start": 16,
+      "line_end": 16,
+      "confidence": 0.86,
+      "recommendation": "Set expiresIn."
+    }
+  ]
+}

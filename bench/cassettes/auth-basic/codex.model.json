@@ -1,0 +1,50 @@
+{
+  "caseId": "auth-basic",
+  "cell": "codex.model",
+  "source": "seeded-from-docs/MODEL_COMPARISON.md#A (refresh with --live)",
+  "verdict": "needs-attention",
+  "summary": "Auth defects plus a missing token expiry.",
+  "latencyMs": 12400,
+  "findings": [
+    {
+      "severity": "critical",
+      "title": "SQL injection via string concatenation",
+      "body": "The query concatenates username into SQL, enabling injection.",
+      "file": "src/auth.js",
+      "line_start": 7,
+      "line_end": 9,
+      "confidence": 0.96,
+      "recommendation": "Use parameterized queries."
+    },
+    {
+      "severity": "high",
+      "title": "Hard-coded secret",
+      "body": "JWT_SECRET is hard-coded in the source file.",
+      "file": "src/auth.js",
+      "line_start": 4,
+      "line_end": 4,
+      "confidence": 0.94,
+      "recommendation": "Move the secret to configuration/secret storage."
+    },
+    {
+      "severity": "high",
+      "title": "Plaintext password equality check",
+      "body": "Password compared with == in plain text rather than a hashed, constant-time comparison.",
+      "file": "src/auth.js",
+      "line_start": 15,
+      "line_end": 15,
+      "confidence": 0.9,
+      "recommendation": "Compare a securely hashed password."
+    },
+    {
+      "severity": "medium",
+      "title": "JWT issued without expiry",
+      "body": "jwt.sign is called without expiresIn, so issued tokens never expire — a session-management risk.",
+      "file": "src/auth.js",
+      "line_start": 16,
+      "line_end": 16,
+      "confidence": 0.86,
+      "recommendation": "Set expiresIn and validate it on verify."
+    }
+  ]
+}
