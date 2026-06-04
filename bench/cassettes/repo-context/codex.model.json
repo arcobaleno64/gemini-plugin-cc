@@ -1,9 +1,21 @@
 {
   "caseId": "repo-context",
   "cell": "codex.model",
-  "source": "seeded illustrative (refresh with --live)",
-  "verdict": "approve",
-  "summary": "Nothing material visible in the diff alone.",
-  "latencyMs": 8900,
-  "findings": []
+  "recordedAt": "2026-06-04T14:12:40.990Z",
+  "verdict": "needs-attention",
+  "summary": "JWT issuance can fail at runtime when required configuration is missing.",
+  "findings": [
+    {
+      "severity": "medium",
+      "title": "JWT secret is used without validation",
+      "body": "`issue` passes `process.env.JWT_SECRET` directly to `jwt.sign`; if the environment variable is missing or empty, token issuance will throw synchronously at runtime, breaking any code path that calls this helper instead of failing fast with a clear configuration error.",
+      "file": "src/token.js",
+      "line_start": 4,
+      "line_end": 4,
+      "confidence": 0.9,
+      "recommendation": "Validate `JWT_SECRET` during module initialization or application startup and throw a clear configuration error before `issue` can be called."
+    }
+  ],
+  "latencyMs": 24330,
+  "raw": "{\"verdict\":\"needs-attention\",\"summary\":\"JWT issuance can fail at runtime when required configuration is missing.\",\"findings\":[{\"severity\":\"medium\",\"title\":\"JWT secret is used without validation\",\"body\":\"`issue` passes `process.env.JWT_SECRET` directly to `jwt.sign`; if the environment variable is missing or empty, token issuance will throw synchronously at runtime, breaking any code path that calls this helper instead of failing fast with a clear configuration error.\",\"file\":\"src/token.js\",\"line_start\":4,\"line_end\":4,\"confidence\":0.9,\"recommendation\":\"Validate `JWT_SECRET` during module initialization or application startup and throw a clear configuration error before `issue` can be called.\"}],\"next_steps\":[\"Add startup/module validation for JWT_SECRET and cover the missing-secret case with a focused test.\"]}\n"
 }

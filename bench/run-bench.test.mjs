@@ -119,6 +119,17 @@ test("extractJsonObject returns null when there is no JSON object", () => {
   assert.equal(adapters.extractJsonObject(null), null);
 });
 
+test("geminiInnerText unwraps the gemini --output-format json envelope across shapes", () => {
+  assert.equal(adapters.geminiInnerText({ response: "hi" }, "fb"), "hi");
+  assert.equal(adapters.geminiInnerText({ response: { text: "nested" } }, "fb"), "nested");
+  assert.equal(
+    adapters.geminiInnerText({ candidates: [{ content: { parts: [{ text: "api" }] } }] }, "fb"),
+    "api"
+  );
+  assert.equal(adapters.geminiInnerText({ text: "top" }, "fb"), "top");
+  assert.equal(adapters.geminiInnerText(null, "fallback"), "fallback");
+});
+
 test("normalizeReview coerces a missing findings array to []", () => {
   assert.deepEqual(adapters.normalizeReview({ verdict: "approve" }), {
     verdict: "approve",

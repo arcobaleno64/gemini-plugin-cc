@@ -1,9 +1,21 @@
 {
   "caseId": "repo-context",
   "cell": "gemini.model",
-  "source": "seeded illustrative (refresh with --live)",
-  "verdict": "approve",
-  "summary": "Nothing material visible in the diff alone.",
-  "latencyMs": 6800,
-  "findings": []
+  "recordedAt": "2026-06-04T14:12:16.659Z",
+  "verdict": "needs-attention",
+  "summary": "JWT issuance lacks environment variable validation and error handling, which will cause runtime crashes if configuration is missing.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Unvalidated environment variable for JWT secret",
+      "body": "The 'issue' function passes 'process.env.JWT_SECRET' directly to 'jwt.sign' without verifying it is defined. If the environment variable is missing, 'jsonwebtoken' throws a 'secret or private key must have a value' error synchronously, likely crashing the process or the current request handler.",
+      "file": "src/token.js",
+      "line_start": 4,
+      "line_end": 4,
+      "confidence": 1,
+      "recommendation": "Add a check to ensure 'process.env.JWT_SECRET' is present at startup or before calling 'jwt.sign', and provide a meaningful error message."
+    }
+  ],
+  "latencyMs": 46886,
+  "raw": "{\n  \"session_id\": \"211de4d2-d4bc-4f3b-bcd2-1330c667cde0\",\n  \"response\": \"{\\n  \\\"verdict\\\": \\\"needs-attention\\\",\\n  \\\"summary\\\": \\\"JWT issuance lacks environment variable validation and error handling, which will cause runtime crashes if configuration is missing.\\\",\\n  \\\"findings\\\": [\\n    {\\n      \\\"severity\\\": \\\"high\\\",\\n      \\\"title\\\": \\\"Unvalidated environment variable for JWT secret\\\",\\n      \\\"body\\\": \\\"The 'issue' function passes 'process.env.JWT_SECRET' directly to 'jwt.sign' without verifying it is defined. If the environment variable is missing, 'jsonwebtoken' throws a 'secret or private key must have a value' error synchronously, likely crashing the process or the current request handler.\\\",\\n      \\\"file\\\": \\\"src/token.js\\\",\\n      \\\"line_start\\\": 4,\\n      \\\"line_end\\\": 4,\\n      \\\"confidence\\\": 1.0,\\n      \\\"recommendation\\\": \\\"Add a check to ensure 'process.env.JWT_SECRET' is present at startup or before calling 'jwt.sign', and provide a meaningful error message.\\\"\\n    }\\n  ],\\n  \\\"next_steps\\\": [\\n    \\\"Validate that 'JWT_SECRET' is set in the environment before starting the application.\\\",\\n    \\\"Wrap 'jwt.sign' in a try-catch block to handle potential payload serialization or signing errors.\\\"\\n  ]\\n}\",\n  \"stats\": {\n    \"models\": {\n      \"gemini-3.1-flash-lite\": {\n        \"api\": {\n          \"totalRequests\": 2,\n          \"totalErrors\": 1,\n          \"totalLatencyMs\": 19320\n        },\n        \"tokens\": {\n          \"input\": 2948,\n          \"prompt\": 2948,\n          \"candidates\": 69,\n          \"total\": 7284,\n          \"cached\": 0,\n          \"thoughts\": 4267,\n          \"tool\": 0\n        },\n        \"roles\": {\n          \"utility_router\": {\n            \"totalRequests\": 2,\n            \"totalErrors\": 1,\n            \"totalLatencyMs\": 19320,\n            \"tokens\": {\n              \"input\": 2948,\n              \"prompt\": 2948,\n              \"candidates\": 69,\n              \"total\": 7284,\n              \"cached\": 0,\n              \"thoughts\": 4267,\n              \"tool\": 0\n            }\n          }\n        }\n      },\n      \"gemini-3-flash-preview\": {\n        \"api\": {\n          \"totalRequests\": 1,\n          \"totalErrors\": 0,\n          \"totalLatencyMs\": 15088\n        },\n        \"tokens\": {\n          \"input\": 3329,\n          \"prompt\": 15262,\n          \"candidates\": 283,\n          \"total\": 17425,\n          \"cached\": 11933,\n          \"thoughts\": 1880,\n          \"tool\": 0\n        },\n        \"roles\": {\n          \"main\": {\n            \"totalRequests\": 1,\n            \"totalErrors\": 0,\n            \"totalLatencyMs\": 15088,\n            \"tokens\": {\n              \"input\": 3329,\n              \"prompt\": 15262,\n              \"candidates\": 283,\n              \"total\": 17425,\n              \"cached\": 11933,\n              \"thoughts\": 1880,\n              \"tool\": 0\n            }\n          }\n        }\n      }\n    },\n    \"tools\": {\n      \"totalCalls\": 0,\n      \"totalSuccess\": 0,\n      \"totalFail\": 0,\n      \"totalDurationMs\": 0,\n      \"totalDecisions\": {\n        \"accept\": 0,\n        \"reject\": 0,\n        \"modify\": 0,\n        \"auto_accept\": 0\n      },\n      \"byName\": {}\n    },\n    \"files\": {\n      \"totalLinesAdded\": 0,\n      \"totalLinesRemoved\": 0\n    }\n  }\n}"
 }
