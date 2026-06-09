@@ -502,6 +502,23 @@ test("review degrades gracefully when gemini returns invalid JSON", () => {
   assert.match(result.stdout, /Parse error:/);
 });
 
+test("review retries a transient gemini failure (Invalid stream) and then succeeds", () => {
+  const { repo, binDir } = setupRepo("review-transient-then-clean");
+  commit(repo, "src/app.js", "export const value = 1;\n");
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = 2;\n");
+
+  const result = run("node", [SCRIPT, "review"], { cwd: repo, env: buildEnv(binDir) });
+
+  assert.equal(result.status, 0, result.stderr);
+  // The 1st gemini invocation failed transiently; runGeminiReviewResilient retried.
+  const state = readFakeState(binDir);
+  assert.equal(state.invocations.length, 2, "expected exactly one retry (2 gemini invocations)");
+  // The retried (2nd) call produced a clean, parseable review — the transient error did not leak.
+  assert.match(result.stdout, /Verdict: approve/);
+  assert.match(result.stdout, /No material findings\./);
+  assert.doesNotMatch(result.stdout, /Invalid stream|Parse error|did not return valid/i);
+});
+
 test("review fails fast outside a git repository", () => {
   const binDir = makeTempDir();
   installFakeGemini(binDir, "review-clean");

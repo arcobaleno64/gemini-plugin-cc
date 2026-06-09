@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { tryParseJsonFromText } from "../plugins/gemini/scripts/lib/gemini.mjs";
+import { tryParseJsonFromText, isTransientReviewFailure } from "../plugins/gemini/scripts/lib/gemini.mjs";
 
 test("parses a clean JSON payload", () => {
   const obj = tryParseJsonFromText('{"verdict":"approve","summary":"s","findings":[],"next_steps":[]}');
@@ -48,4 +48,42 @@ test("parses the outer gemini envelope carrying a stringified response", () => {
 test("recovers the JSON object when trailing log noise follows it", () => {
   const obj = tryParseJsonFromText('{"verdict":"approve","summary":"s","findings":[]}\nDone. exit 0\n');
   assert.equal(obj.verdict, "approve");
+});
+
+test("isTransientReviewFailure: structured findings are never transient", () => {
+  assert.equal(
+    isTransientReviewFailure({ reviewJson: { verdict: "approve" }, reviewText: "", stderr: "" }),
+    false
+  );
+});
+
+test("isTransientReviewFailure: empty stdout+stderr is transient", () => {
+  assert.equal(isTransientReviewFailure({ reviewJson: null, reviewText: "", stderr: "" }), true);
+});
+
+test("isTransientReviewFailure: the malformed envelope is transient on either channel", () => {
+  // stderr (the common case)…
+  assert.equal(
+    isTransientReviewFailure({ reviewJson: null, reviewText: "", stderr: "Invalid stream: ...malformed tool call" }),
+    true
+  );
+  // …and stdout (builds that emit the envelope with exit 0).
+  assert.equal(
+    isTransientReviewFailure({ reviewJson: null, reviewText: "Invalid stream: empty response", stderr: "" }),
+    true
+  );
+});
+
+test("isTransientReviewFailure: a transport flake on stderr is transient", () => {
+  assert.equal(
+    isTransientReviewFailure({ reviewJson: null, reviewText: "", stderr: "503: service temporarily unavailable" }),
+    true
+  );
+});
+
+test("isTransientReviewFailure: a real prose review mentioning HTTP codes is NOT transient", () => {
+  // Channel separation in action: loose transport words in the review's own prose
+  // (stdout) must not be mistaken for a transport flake on stderr.
+  const prose = "The handler returns a 500 and ignores the rate limit; it is unavailable under load.";
+  assert.equal(isTransientReviewFailure({ reviewJson: null, reviewText: prose, stderr: "" }), false);
 });

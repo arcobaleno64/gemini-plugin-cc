@@ -52,7 +52,7 @@ import {
 } from "./lib/render.mjs";
 import {
   runGeminiTurn,
-  runGeminiReview,
+  runGeminiReviewResilient,
   getGeminiAvailability,
   getAgyAvailability,
   getGeminiLoginStatus,
@@ -398,7 +398,7 @@ async function executeReviewRun(request) {
   // --deep: invite agentic repo exploration beyond the diff (read-only). Default
   // stays the fast, diff-scoped single-shot review (zero behavior change).
   const prompt = request.deep ? `${basePrompt}\n${DEEP_REVIEW_GUIDANCE}` : basePrompt;
-  const result = await runGeminiReview(request.cwd, {
+  const result = await runGeminiReviewResilient(request.cwd, {
     prompt,
     model: request.model,
     engine: request.engine,

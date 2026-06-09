@@ -402,6 +402,60 @@ export async function runGeminiReview(cwd, options = {}) {
   };
 }
 
+// Transient gemini failures that warrant a retry of a READ-ONLY review: the CLI
+// occasionally returns an empty / `Invalid stream` / malformed-tool-call envelope,
+// or a transport-level rate-limit / unavailability — none deterministic. This is
+// DISTINCT from model-not-found (handled inline by the GA fallback above): a
+// transient flake produces no usable findings at all and is worth re-running.
+//
+// The signal is matched by CHANNEL to avoid false positives (both ANSI-stripped):
+// the malformed-output ENVELOPE phrases never occur in a real review's prose, so we
+// accept them on either stream (some builds emit the envelope on stdout with exit 0,
+// others on stderr). The loose TRANSPORT words CAN legitimately appear in a review's
+// prose (a review may discuss a "500" or "rate limit"), so we trust those only on
+// stderr — where the model's review text never lands.
+const ENVELOPE_REVIEW_RE = /invalid stream|malformed tool call|empty response|no response/i;
+const TRANSPORT_REVIEW_RE = /resource[_ ]?exhausted|unavailable|deadline|temporarily|try again|rate.?limit|\b(429|500|502|503|504)\b|econnreset|socket hang|stream closed/i;
+
+export function isTransientReviewFailure({ reviewJson, reviewText, stderr } = {}) {
+  if (reviewJson != null) return false;                       // got structured findings — success
+  const out = (reviewText ?? "").trim();
+  const err = (stderr ?? "").trim();
+  if (!out && !err) return true;                              // empty stdout+stderr — nothing usable
+  if (ENVELOPE_REVIEW_RE.test(`${out}\n${err}`)) return true; // envelope — trusted on either channel
+  if (TRANSPORT_REVIEW_RE.test(err)) return true;             // transport flake — trusted on stderr only
+  return false;                                               // real non-transient output (e.g. prose review) — keep it
+}
+
+// Resilient wrapper around runGeminiReview: a READ-ONLY adversarial review is
+// idempotent (no side effects), so a transient empty / `Invalid stream` envelope is
+// safe to re-run. The gemini CLI flakes intermittently on this in practice
+// (observed needing 2-3 attempts for the SAME input); retrying here removes that
+// flakiness from the caller. agy is NOT retried — its transcript-recovery path and
+// fail-fast timeout handle its distinct failure mode, and re-spawning it is costly.
+// Composes with runGeminiReview's inline GA-fallback (model-not-found) retry: that
+// fixes a deterministic wrong-model error within a single attempt; this re-runs the
+// whole review only when no usable result came back at all.
+export async function runGeminiReviewResilient(cwd, options = {}, { maxAttempts = 3 } = {}) {
+  let last = null;
+  let prevText = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    last = await runGeminiReview(cwd, options);
+    if (last.engine === "agy") return { ...last, attempts: attempt };
+    if (!isTransientReviewFailure(last)) return { ...last, attempts: attempt };
+    // Backstop for a residual stderr-side false positive: identical non-empty review
+    // text across attempts is deterministic output that merely tripped the heuristic,
+    // not a flake — keep it rather than burning the remaining retries on the same result.
+    const text = (last.reviewText ?? "").trim();
+    if (text && text === prevText) return { ...last, attempts: attempt };
+    prevText = text;
+    if (attempt < maxAttempts) {
+      options.onProgress?.({ message: `Transient review failure (attempt ${attempt}/${maxAttempts}); retrying...`, phase: "reviewing" });
+    }
+  }
+  return { ...last, attempts: maxAttempts, exhaustedTransientRetries: true };
+}
+
 export function getGeminiAvailability() {
   return binaryAvailable("gemini", ["--version"]);
 }
