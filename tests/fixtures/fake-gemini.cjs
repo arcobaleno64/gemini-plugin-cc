@@ -82,6 +82,14 @@ function buildResponse() {
       });
     case "review-invalid":
       return "not valid json";
+    case "review-transient-then-clean":
+      // 2nd+ invocation returns a clean review (the 1st fails transiently in respond()).
+      return JSON.stringify({
+        verdict: "approve",
+        summary: "No material issues found (after a transient retry).",
+        findings: [],
+        next_steps: []
+      });
     default:
       if (argv.includes("--resume")) {
         return "Resumed the prior run.\nFollow-up prompt accepted.";
@@ -117,6 +125,13 @@ function respond(prompt) {
     });
     process.stdout.write(JSON.stringify({ session_id: sessionId, response: review }));
     process.exit(0);
+  }
+
+  if (SCENARIO === "review-transient-then-clean" && state.invocations.length === 1) {
+    // First invocation only: emulate the intermittent gemini empty / `Invalid stream`
+    // envelope so runGeminiReviewResilient must retry. The 2nd call returns clean JSON.
+    process.stderr.write("Invalid stream: The model returned an empty response or malformed tool call.\n");
+    process.exit(1);
   }
 
   if (SCENARIO === "task-fail") {

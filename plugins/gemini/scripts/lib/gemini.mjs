@@ -402,6 +402,45 @@ export async function runGeminiReview(cwd, options = {}) {
   };
 }
 
+// Transient gemini failures that warrant a retry of a READ-ONLY review: the CLI
+// occasionally returns an empty / `Invalid stream` / malformed-tool-call envelope,
+// or a transport-level rate-limit / unavailability — none deterministic. This is
+// DISTINCT from model-not-found (handled inline by the GA fallback above): a
+// transient flake produces no usable findings at all and is worth re-running.
+// Matched against the recovered review text + stderr (already ANSI-stripped).
+const TRANSIENT_REVIEW_RE = /invalid stream|malformed tool call|empty response|no response|resource[_ ]?exhausted|unavailable|deadline|temporarily|try again|rate.?limit|\b(429|500|502|503|504)\b|econnreset|socket hang|stream closed/i;
+
+export function isTransientReviewFailure({ status, reviewJson, reviewText, stderr } = {}) {
+  if (reviewJson != null) return false;            // got structured findings — success
+  const text = `${reviewText ?? ""}\n${stderr ?? ""}`.trim();
+  if (!text) return true;                          // empty stdout+stderr — nothing usable
+  if (status !== 0 && TRANSIENT_REVIEW_RE.test(text)) return true;
+  if (TRANSIENT_REVIEW_RE.test(text)) return true; // some builds emit the error with exit 0
+  return false;                                    // real non-transient output (e.g. prose review) — keep it
+}
+
+// Resilient wrapper around runGeminiReview: a READ-ONLY adversarial review is
+// idempotent (no side effects), so a transient empty / `Invalid stream` envelope is
+// safe to re-run. The gemini CLI flakes intermittently on this in practice
+// (observed needing 2-3 attempts for the SAME input); retrying here removes that
+// flakiness from the caller. agy is NOT retried — its transcript-recovery path and
+// fail-fast timeout handle its distinct failure mode, and re-spawning it is costly.
+// Composes with runGeminiReview's inline GA-fallback (model-not-found) retry: that
+// fixes a deterministic wrong-model error within a single attempt; this re-runs the
+// whole review only when no usable result came back at all.
+export async function runGeminiReviewResilient(cwd, options = {}, { maxAttempts = 3 } = {}) {
+  let last = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    last = await runGeminiReview(cwd, options);
+    if (last.engine === "agy") return { ...last, attempts: attempt };
+    if (!isTransientReviewFailure(last)) return { ...last, attempts: attempt };
+    if (attempt < maxAttempts) {
+      options.onProgress?.({ message: `Transient review failure (attempt ${attempt}/${maxAttempts}); retrying...`, phase: "reviewing" });
+    }
+  }
+  return { ...last, attempts: maxAttempts, exhaustedTransientRetries: true };
+}
+
 export function getGeminiAvailability() {
   return binaryAvailable("gemini", ["--version"]);
 }

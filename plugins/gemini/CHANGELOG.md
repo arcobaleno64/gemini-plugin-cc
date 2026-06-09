@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.6 — 2026-06-09 — review retry resilience
+
+### Fixed
+- **Transient gemini review failures are now retried.** The gemini CLI intermittently returns an empty / `Invalid stream: ...malformed tool call` envelope (or a transport-level rate-limit / unavailability) for an otherwise-valid request; previously a single such flake surfaced to the caller as a parse error and forced a manual re-run (observed needing 2–3 attempts for the same input in practice). `/gemini:review` and `/gemini:adversarial-review` now call `runGeminiReviewResilient`, which re-runs a **read-only** review up to 3 times when the result is transient (empty stdout+stderr, or an `Invalid stream` / `malformed tool call` / `resource_exhausted` / `unavailable` / `5xx` / `429`-class signal with no parseable findings). A review that yields structured findings — or real, non-transient prose — is **never** retried (read-only reviews are idempotent, so the retry is side-effect-free); `agy` is never retried (its transcript-recovery path and fail-fast 2-min timeout handle its distinct failure mode). This composes with the existing GA-fallback retry (model-not-found, fixed within one attempt) rather than replacing it. New helper `isTransientReviewFailure`, fixture scenario `review-transient-then-clean`, and a regression test.
+
 ## 0.6.5 — 2026-06-04 — low-severity cleanup
 
 ### Fixed
