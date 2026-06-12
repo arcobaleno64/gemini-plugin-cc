@@ -210,7 +210,7 @@
 
 > `--model` 與 `--effort` 僅適用於 **gemini** 引擎。`agy --print` 鎖定 Gemini 3.5 Flash（High）、無 model/effort 旗標，故 `--engine agy` 時外掛會忽略 `--model`/`--effort`。
 
-> **AGY 紀錄恢復僅在 Windows 與 Linux 驗證通過。** 因 `agy --print` 不透過 pipe 輸出（上游 [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466)），外掛改從磁碟上的「brain」紀錄恢復回應——`~/.gemini/antigravity-cli/brain`（Windows 1.0.3，已驗證）或 `~/.antigravity-cli/brain`（Linux 1.0.2，回報）。**macOS 尚未驗證**——其 brain 路徑未知，故 `--engine agy` 在 macOS 上可能無法啟動。若於 macOS 使用 AGY，請開 issue 回報實際的 brain 目錄，以便補上該路徑。
+> **AGY 紀錄恢復已於 Windows 與 macOS 驗證通過；Linux 為回報可用。** 因 `agy --print` 不透過 pipe 輸出（上游 [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466)——已於 macOS agy 1.0.7 重現：pipe 下 stdout 為 0 bytes），外掛改從磁碟上的「brain」紀錄恢復回應——`~/.gemini/antigravity-cli/brain`（Windows 1.0.3 與 macOS 1.0.7，皆已驗證、同一路徑）或 `~/.antigravity-cli/brain`（Linux 1.0.2，回報）。若 `--engine agy` 回報找不到 brain 根目錄，請先執行一次 `agy` 讓其建立該目錄，或開 issue 回報實際位置。
 
 ---
 
@@ -235,7 +235,7 @@
 | setup 顯示 `… token expired` | OAuth token 已過期 | 再次執行 `!gemini` 以更新憑證 |
 | `Status: partial (AGY fallback only …)` | Gemini CLI 不可用但 AGY 存在 | 安裝 Gemini CLI，或使用 `--engine agy`（其認證無法驗證） |
 | Windows：命令可解析但執行失敗 | `.cmd` wrapper／PATH | 確認 `where gemini` 可解析；外掛以 `shell: true` 啟動裸命令名以尋得 `.cmd` shim |
-| `--engine agy` 於 macOS 無法啟動 | macOS 上 AGY brain 路徑未驗證 | 紀錄恢復僅在 Windows/Linux 驗證；於 macOS 請確認 `agy` 的 brain 目錄並開 issue 回報其位置 |
+| `--engine agy` 回報找不到 brain 根目錄 | AGY 尚未建立 brain 目錄，或其位於未知位置 | 先執行一次 `agy` 讓其建立 brain 目錄。已知路徑：`~/.gemini/antigravity-cli/brain`（Windows/macOS，已驗證）與 `~/.antigravity-cli/brain`（Linux，回報）；若不同請開 issue 回報其位置 |
 
 如需認證，執行一次 **`!gemini`**——外掛即以呼叫 `gemini` 自身完成 OAuth。**並無** `gemini login` 子命令。唯有 Node **且** Gemini CLI 皆存在**且** OAuth 有效時，`setup` 方回報 `ready: true`；已安裝但未認證之 Gemini 將回報為 *not ready*。
 
@@ -300,7 +300,6 @@ Claude Code
 
 以下為已記錄之非阻塞限制——詳見所連結之章節：
 
-- **macOS 之 AGY 未驗證。** AGY transcript 恢復僅於 Windows／Linux 驗證；macOS 之「brain」路徑未知，故 `--engine agy` 於其上或無法啟動。`gemini` 引擎不受影響。詳見 [引擎路由](#引擎路由)。
 - **gemini CLI 不提供 Gemini 3.5，且免費 CLI 於 2026-06-18 終止。** `gemini-3.5-*` 於 CLI 0.44.1 回 404（改走 AGY）；不被提供之 model id 會優雅降級至 GA fallback `gemini-2.5-flash`。2026-06-18 後免費／個人版 CLI 層級終止。詳見 [模型別名說明](#模型別名說明) 與 [docs/MODEL_COMPARISON.md](docs/MODEL_COMPARISON.md)。
 - **`/gemini:review` 為 prompt／CLI adapter，非原生審查器。** 其將 diff 連同審查 prompt 送出並解析結構化 JSON，而非透過 app-server 審查器，故反饋深度有別於原生。詳見 [Codex app server 與 Gemini CLI adapter](#codex-app-server-與-gemini-cli-adapter)。
 

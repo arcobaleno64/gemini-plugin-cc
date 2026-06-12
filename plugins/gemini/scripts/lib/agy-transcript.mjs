@@ -4,7 +4,8 @@
 // ---------------
 // `agy --print` does NOT deliver its response over stdout in non-TTY use
 // (upstream bug google-gemini/gemini-cli#27466; locally verified empty/hang on
-// agy 1.0.3). The response IS persisted to disk under the agy "brain" dir. We
+// agy 1.0.3 Windows and reproduced on 1.0.7 macOS — 0 bytes piped to stdout).
+// The response IS persisted to disk under the agy "brain" dir. We
 // recover it by diffing the set of conversation dirs before/after the spawn and
 // reading the new one's transcript.
 //
@@ -24,22 +25,24 @@
 //   TODO-2 (concurrency): job-control spawns one foreground agy turn at a time;
 //     pickNewConvDir() still marks confident=false if >1 new dir appears so the
 //     caller can warn. Add a hard lock if background agy turns are introduced.
-//   TODO-3 (platform paths): Windows 1.0.3 root verified (first entry below);
-//     Linux 1.0.2 reported; macOS still UNVERIFIED. Timeout grace IS applied in
-//     runGeminiTurn (agy --print-timeout window < the hard spawn kill).
+//   TODO-3 (platform paths): RESOLVED — Windows 1.0.3 and macOS 1.0.7 share
+//     the ~/.gemini/antigravity-cli/brain root (both machine-verified, macOS
+//     2026-06-12 end-to-end: task --engine agy recovered the transcript);
+//     Linux 1.0.2 reported at ~/.antigravity-cli/brain. Timeout grace IS
+//     applied in runGeminiTurn (agy --print-timeout window < the hard spawn
+//     kill).
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// Candidate brain roots, newest-platform first. Verified: 1.0.3 Windows.
-// Reported: 1.0.2 Linux. macOS: UNVERIFIED — confirm via TODO-3.
+// Candidate brain roots, newest-platform first. Verified: 1.0.3 Windows and
+// 1.0.7 macOS (same root). Reported: 1.0.2 Linux.
 export function agyBrainRoots() {
   const home = os.homedir();
   return [
-    path.join(home, ".gemini", "antigravity-cli", "brain"), // 1.0.3 Windows (verified)
+    path.join(home, ".gemini", "antigravity-cli", "brain"), // 1.0.3 Windows + 1.0.7 macOS (verified)
     path.join(home, ".antigravity-cli", "brain"),           // 1.0.2 Linux (reported)
-    // path.join(home, "Library", "Application Support", "agy", "brain"), // macOS? TODO-3
   ];
 }
 
@@ -161,7 +164,7 @@ export function readAgyTranscript(brainRoot, convDir) {
 // result here AFTER the spawn returns.
 export function recoverAgyResponse(brainRoot, beforeSnapshot) {
   if (!brainRoot) {
-    return { response: null, thinking: null, done: false, confident: false, convDir: null, reason: "no agy brain root found on this platform (see TODO-3)" };
+    return { response: null, thinking: null, done: false, confident: false, convDir: null, reason: "no agy brain root found on this platform (run agy once to create it; see agyBrainRoots() for the known roots)" };
   }
   const after = listConvDirs(brainRoot);
   const picked = pickNewConvDir(beforeSnapshot, after);
