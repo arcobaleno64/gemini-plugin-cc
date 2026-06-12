@@ -126,7 +126,7 @@ Better:
 - Let the plugin recover the response from AGY's on-disk transcript — that is the only reliable channel.
 - Prefer the **gemini** engine (`--output-format json`) when you need clean, pipeable structured output.
 
-Explanation: `agy --print` does not deliver its response over a pipe in non-interactive use (upstream google-gemini/gemini-cli#27466). No prompt instruction changes that; the plugin diffs the transcript dirs to recover the answer, and this path is verified on Windows/Linux only (macOS unverified).
+Explanation: `agy --print` does not deliver its response over a pipe in non-interactive use (upstream google-gemini/gemini-cli#27466). No prompt instruction changes that; the plugin diffs the transcript dirs to recover the answer; this path is verified on Windows and macOS (same brain root), with Linux reported working.
 
 ## Assuming Gemini/AGY behaves like Codex (parity-specific)
 

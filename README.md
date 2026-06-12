@@ -212,7 +212,7 @@ Override via `--engine` flag or the `GEMINI_ENGINE` environment variable.
 
 > `--model` and `--effort` apply to the **gemini** engine only. `agy --print` is locked to Gemini 3.5 Flash (High) and has no model/effort flag, so the plugin ignores `--model`/`--effort` when `--engine agy` is active.
 
-> **AGY transcript recovery is platform-verified on Windows and Linux only.** Because `agy --print` does not pipe its output (upstream [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466)), the plugin recovers AGY responses from the on-disk "brain" transcript under `~/.gemini/antigravity-cli/brain` (Windows 1.0.3, verified) or `~/.antigravity-cli/brain` (Linux 1.0.2, reported). **macOS is unverified** — its brain path is unknown, so `--engine agy` may fail to start on macOS. If you run AGY on macOS, please open an issue with the actual brain directory so the path can be added.
+> **AGY transcript recovery is platform-verified on Windows and macOS; Linux is reported working.** Because `agy --print` does not pipe its output (upstream [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466) — reproduced on macOS agy 1.0.7: 0 bytes reach stdout through a pipe), the plugin recovers AGY responses from the on-disk "brain" transcript under `~/.gemini/antigravity-cli/brain` (Windows 1.0.3 and macOS 1.0.7, both verified — same root) or `~/.antigravity-cli/brain` (Linux 1.0.2, reported). If `--engine agy` reports no brain root on your machine, run `agy` once so it creates the directory, or open an issue with its actual location.
 
 ---
 
@@ -237,7 +237,7 @@ Override via `--engine` flag or the `GEMINI_ENGINE` environment variable.
 | setup shows `… token expired` | OAuth token lapsed | Run `!gemini` again to refresh credentials |
 | `Status: partial (AGY fallback only …)` | Gemini CLI unavailable but AGY present | Install Gemini CLI, or use `--engine agy` (its auth cannot be verified) |
 | Windows: command resolves but fails | `.cmd` wrapper / PATH | Confirm `where gemini` resolves; the plugin spawns bare names through `shell: true` to find `.cmd` shims |
-| `--engine agy` fails to start on macOS | AGY brain path unverified on macOS | Transcript recovery is verified on Windows/Linux only; on macOS, confirm the `agy` brain directory and open an issue with its location |
+| `--engine agy` reports no brain root | AGY has not created its brain directory yet, or it lives in an unknown location | Run `agy` once so it creates the brain dir. Known roots: `~/.gemini/antigravity-cli/brain` (Windows/macOS, verified) and `~/.antigravity-cli/brain` (Linux, reported); if yours differs, open an issue with its location |
 
 To authenticate, run **`!gemini`** once — the plugin completes OAuth by invoking `gemini` itself. There is **no** `gemini login` subcommand. `setup` reports `ready: true` only when Node **and** the Gemini CLI are present **and** OAuth is valid; an installed-but-unauthenticated Gemini is reported as *not ready*.
 
@@ -302,7 +302,6 @@ Three skills are bundled for Claude Code to consume:
 
 Documented, non-blocking constraints — see the linked sections for detail:
 
-- **macOS AGY is unverified.** AGY transcript recovery is verified on Windows/Linux only; the macOS "brain" path is unknown, so `--engine agy` may not start there. The `gemini` engine is unaffected. See [Engine Routing](#engine-routing).
 - **Gemini 3.5 is not served by the gemini CLI, and the free CLI sunsets 2026-06-18.** `gemini-3.5-*` returns 404 on CLI 0.44.1 (reach it via AGY); a requested id that is not served degrades gracefully to the GA fallback `gemini-2.5-flash`. After 2026-06-18 the free/personal CLI tier ends. See [Model Alias Notes](#model-alias-notes) and [docs/MODEL_COMPARISON.md](docs/MODEL_COMPARISON.md).
 - **`/gemini:review` is a prompt/CLI adapter, not a native reviewer.** It sends the diff with a review prompt and parses the structured JSON, rather than using an app-server reviewer, so its feedback depth differs from a native one. See [Codex app server vs Gemini CLI adapter](#codex-app-server-vs-gemini-cli-adapter).
 
