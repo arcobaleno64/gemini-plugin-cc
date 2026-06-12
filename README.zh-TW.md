@@ -26,7 +26,7 @@
 |---|---|---|
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
 | Gemini CLI | ≥ 0.40 | `npm install -g @google/gemini-cli` |
-| AGY _(選用)_ | 1.0.3 | _(安裝指令見下)_ |
+| AGY _(選用)_ | ≥ 1.0.3 | _(安裝指令見下)_ |
 | Claude Code | 任意版本 | [claude.ai/code](https://claude.ai/code) |
 
 **安裝 AGY**（選用備援）：`curl -fsSL https://antigravity.google/cli/install.sh | bash`
@@ -56,15 +56,15 @@
 
 ### 釘選發布版（指定某個已發布版本）
 
-將 marketplace 釘到某個 release 標籤——例如最新的 `v0.6.0`：
+將 marketplace 釘到某個 release 標籤——例如最新的 `v0.6.6`：
 
 ```
-/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.6.0
+/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.6.6
 /plugin install gemini@gemini-plugin-cc
 /reload-plugins
 ```
 
-> Claude Code 從 git tree 安裝外掛，**並非**從 GitHub Releases 的 tarball——`@<tag>` 選的是 [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases) 背後的 git 標籤。釘版安裝**不會**自動更新；欲升至新版，請以新標籤重新加入 marketplace（例如 `…@v0.6.1`）。
+> Claude Code 從 git tree 安裝外掛，**並非**從 GitHub Releases 的 tarball——`@<tag>` 選的是 [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases) 背後的 git 標籤。釘版安裝**不會**自動更新；欲升至新版，請以新標籤重新加入 marketplace（例如 `…@v0.6.7`）。
 
 接著執行 `/gemini:setup`——若 Gemini CLI 尚未安裝且 npm 可用，指令會提供自動安裝選項。
 

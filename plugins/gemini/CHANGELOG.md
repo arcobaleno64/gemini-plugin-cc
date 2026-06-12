@@ -4,6 +4,7 @@
 
 ### Documentation
 - **macOS AGY is now platform-verified.** On macOS (agy 1.0.7) the AGY brain root is `~/.gemini/antigravity-cli/brain` — the same path already first in `agyBrainRoots()` — so `--engine agy` works out of the box: `gemini-companion.mjs task --engine agy` was run end-to-end on macOS and recovered the response from the transcript (`<conv>/.system_generated/logs/transcript{,_full}.jsonl`, matching the expected layout), and the upstream no-pipe behavior of `agy --print` ([google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466)) was reproduced on macOS (0 bytes reach stdout through a pipe), confirming transcript recovery is required there too. Updated README (EN + zh-TW) Engine Routing / Troubleshooting / Known limitations, the `gemini-prompting` antipatterns reference, and the `agy-transcript.mjs` platform notes; TODO-3 (platform paths) is resolved, and the "no brain root" reason string now tells the user to run `agy` once instead of pointing at an internal TODO. No behavior change — comments, docs, and one user-facing message only.
+- **README install snippets and dependency table refreshed to the current release.** Pinned-install examples now reference the latest tag `v0.6.6` (was the stale `v0.6.0`), the "newer tag" example bumped to `v0.6.7`, and the AGY dependency row reads `≥ 1.0.3` (1.0.7 verified on macOS). Docs only, no behavior change.
 
 ## 0.6.6 — 2026-06-09 — review retry resilience
 

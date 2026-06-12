@@ -28,7 +28,7 @@ Ported from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) 
 |---|---|---|
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
 | Gemini CLI | ≥ 0.40 | `npm install -g @google/gemini-cli` |
-| AGY _(optional)_ | 1.0.3 | _(see install note below)_ |
+| AGY _(optional)_ | ≥ 1.0.3 | _(see install note below)_ |
 | Claude Code | any | [claude.ai/code](https://claude.ai/code) |
 
 **Install AGY** (optional fallback): `curl -fsSL https://antigravity.google/cli/install.sh | bash`
@@ -58,15 +58,15 @@ Ported from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) 
 
 ### Pinned release (a specific published version)
 
-Pin the marketplace to a release tag — e.g. the latest, `v0.6.0`:
+Pin the marketplace to a release tag — e.g. the latest, `v0.6.6`:
 
 ```
-/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.6.0
+/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.6.6
 /plugin install gemini@gemini-plugin-cc
 /reload-plugins
 ```
 
-> Claude Code installs plugins from the git tree, not from GitHub Release tarballs — `@<tag>` selects the git tag behind a [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases). A pinned install does **not** auto-update; to move to a newer release, re-add the marketplace with the new tag (e.g. `…@v0.6.1`).
+> Claude Code installs plugins from the git tree, not from GitHub Release tarballs — `@<tag>` selects the git tag behind a [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases). A pinned install does **not** auto-update; to move to a newer release, re-add the marketplace with the new tag (e.g. `…@v0.6.7`).
 
 Then run `/gemini:setup` — it will check whether Gemini CLI is ready. If Gemini is missing and npm is available, it will offer to install it for you.
 
