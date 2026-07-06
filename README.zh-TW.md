@@ -1,8 +1,33 @@
-# gemini — Claude Code 外掛
+# Gemini / Antigravity Companion for Claude Code
 
-> 直接從 Claude Code 將任務與對抗性程式碼審查委派給 Google Gemini / AGY。
+> 在 Claude Code 內使用 Gemini CLI 或 Antigravity CLI (`agy`) 進行 task delegation、pragmatic code review 與 adversarial review。
+
+**為 Google Gemini CLI 到 Antigravity CLI 的遷移期而準備。**
+`gemini-plugin-cc` 保留熟悉的 Claude Code slash-command workflow；Gemini CLI 可用時可走 Gemini CLI，遷移到 Antigravity CLI (`agy`) 的使用者則可改走 AGY engine。
 
 本外掛移植自 [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)（Apache-2.0）的技能架構——相同的斜線命令 UX、相同的背景工作模型、相同的技能合約——由 Gemini 生態系統驅動。
+
+---
+
+## 為什麼選這個外掛？
+
+`gemini-plugin-cc` 是 Claude Code-native 的 companion bridge，適合在 Google Gemini CLI transition 期間同時保留 Gemini CLI 與 Antigravity CLI (`agy`) 路徑的使用者。
+
+相較於 AGY-only、多宿主外掛，本專案保留 Gemini CLI 可用時的路徑，同時提供明確的 `--engine agy` 給正在遷移到 Antigravity CLI 的使用者。
+
+- Claude Code-native 的 `/gemini:*` slash commands。
+- 對目前 diff 或 branch 執行 pragmatic code review 與 adversarial review。
+- 用 background task delegation 處理較長時間的 companion-agent 工作。
+- Gemini model aliases、graceful model fallback 與 transient review retry。
+- 針對 `agy --print` non-pipe behavior 的 AGY transcript recovery。
+- Gemini engine 採用較安全的 stdin prompt delivery。
+
+| 需求 | 適合使用本外掛的情境 |
+|---|---|
+| Gemini CLI 仍可用 | 你需要 model selection、JSON output 與 stdin prompt delivery。 |
+| 正在遷移到 AGY | 使用 `--engine agy` 作為 Antigravity CLI fallback。 |
+| 需要 adversarial review | 使用 `/gemini:adversarial-review`，可加 focus text。 |
+| 需要 AGY-only 多宿主支援 | 可考慮 AGY-only plugin。 |
 
 ---
 
@@ -34,8 +59,8 @@
 **認證**：執行一次 `gemini` 完成 OAuth 登入。不需要 API 金鑰。
 
 > **重要提示（貼近現實）：**
-> - **2026-06-18**：免費／個人版 gemini CLI 存取終止。之後 **gemini** 引擎需付費 Gemini Code Assist Standard/Enterprise tier；**AGY**（`--engine agy`）成為免費途徑。
-> - **Gemini 3.5**（Flash/Pro）已在 API GA，但 **gemini CLI 0.44.1（最新）並不提供**——會回 404。請改走 **AGY** 引擎（固定模型）。若所請求 id 不可用，外掛會優雅降級至 GA 模型。詳見 [模型別名](#模型別名) 與 [docs/MODEL_COMPARISON.md](docs/MODEL_COMPARISON.md)。
+> - **2026-06-18 consumer transition**：Google 宣布免費／個人版、Google AI Pro、Google AI Ultra 的 Gemini CLI requests 於此日期後停止服務；Standard/Enterprise access 維持。詳見 Google 的 [Gemini CLI to Antigravity CLI announcement](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)。
+> - **模型可用性會隨 CLI 版本漂移。** 2026-06-02 以 gemini CLI 0.44.1 實測時，`gemini-3.5-*` 回 `404 ModelNotFound`；新版 CLI 可能不同。若所請求 id 不可用，外掛會優雅降級至 GA 模型。詳見 [模型別名](#模型別名) 與 [docs/MODEL_COMPARISON.md](docs/MODEL_COMPARISON.md)。
 
 ---
 
@@ -56,7 +81,7 @@
 
 ### 釘選發布版（指定某個已發布版本）
 
-將 marketplace 釘到某個 release 標籤——例如最新的 `v0.6.6`：
+將 marketplace 釘到某個 release 標籤——例如 `v0.6.6`：
 
 ```
 /plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.6.6
@@ -151,7 +176,7 @@
 
 ### `/gemini:result [工作-ID]`
 
-取得已完成工作的輸出內容。若工作帶有 Gemini session ID，輸出中會包含 `Resume in Gemini: gemini resume <session-id>`——將該命令貼到終端機即可直接在 Gemini CLI 中接續工作階段。
+取得已完成工作的輸出內容。若工作帶有 Gemini session ID，輸出中會包含 `Resume in Gemini: gemini --resume <session-id>`——將該命令貼到終端機即可直接在 Gemini CLI 中接續工作階段。
 
 ### `/gemini:cancel [工作-ID]`
 
@@ -181,7 +206,7 @@
 
 | 別名 | 對應模型 | 說明 |
 |---|---|---|
-| `flash` / `flash3` | `gemini-3-flash-preview` | 最新 Gemini 3 Flash（preview） |
+| `flash` / `flash3` | `gemini-3-flash-preview` | Gemini 3 Flash（preview） |
 | `pro` / `pro3` | `gemini-3.1-pro-preview` | Gemini 3.1 Pro（preview） |
 | `flash25` | `gemini-2.5-flash` | 穩定 2.5 Flash（GA） |
 | `pro25` | `gemini-2.5-pro` | 穩定 2.5 Pro（GA） |
@@ -192,10 +217,10 @@
 
 - 別名與努力等級集中於單一來源——`plugins/gemini/scripts/lib/model-map.mjs`——且 `npm test` 會以其驗證上表，二者不致漂移。
 - **努力對映**（於提供 `--effort` 但未給 `--model` 時套用）：`none`/`minimal` → `gemini-2.5-flash-lite`；`low`/`medium` → `gemini-3-flash-preview`；`high`/`xhigh` → `gemini-3.1-pro-preview`。
-- **Preview ID 可能變動。** 以 `-preview` 結尾之 model ID 追隨 Google 的 preview channel（最後驗證於 gemini CLI 0.44.1）。若某別名無法解析，以 `--model <精確 ID>` 覆蓋——任何非已知別名之值將原樣透傳給 CLI。
-- **Gemini 3.5 尚未上 CLI。** `gemini-3.5-flash` 與 `gemini-3.5-pro` 已在 Gemini API GA，但 **gemini CLI 0.44.1（目前最新）並不提供**——會回 `404 ModelNotFound`。欲用 Gemini 3.5 Flash，請改走 **AGY 引擎**（`--engine agy`，由其固定執行；無 `--model`/`--effort` 選擇）。
+- **CLI probe snapshot。** 上表反映 2026-06-02 以 gemini CLI 0.44.1 進行的 model-map 實測；新版 Gemini CLI 可能提供不同 model ID。若某別名無法解析，以 `--model <精確 ID>` 覆蓋——任何非已知別名之值將原樣透傳給 CLI。
+- **Gemini 3.5 可用性會漂移。** 2026-06-02 以 gemini CLI 0.44.1 實測時，`gemini-3.5-flash` 與 `gemini-3.5-pro` 回 `404 ModelNotFound`；新版 CLI 可能不同。未知或不可用 model ID 會優雅降級至 GA fallback。
 - **模型優雅降級。** 若所請求之 model id 在你的 gemini CLI 上找不到（preview/已退役 id，或 CLI 版本落差），外掛會**以 GA fallback `gemini-2.5-flash` 重試一次**並印出明確提示——讓過時 id 優雅降級，而非硬性失敗。
-- **AGY 忽略 `--model` 與 `--effort`。** `agy --print` 鎖定 Gemini 3.5 Flash（High）、無模型／努力選擇；`--engine agy` 時外掛會印出提示並忽略此二旗標。
+- **AGY model selection 尚未由本外掛管理。** 部分 AGY 版本提供自己的 `--model` 介面，但 `--engine agy` 目前走 AGY 的 configured/default model；本外掛不會把 `--model` 或 `--effort` 翻譯成 AGY 參數。若要由外掛管理 model selection，請用 `--engine gemini`。
 
 ---
 
@@ -208,7 +233,7 @@
 
 可透過 `--engine` 旗標或 `GEMINI_ENGINE` 環境變數覆蓋。
 
-> `--model` 與 `--effort` 僅適用於 **gemini** 引擎。`agy --print` 鎖定 Gemini 3.5 Flash（High）、無 model/effort 旗標，故 `--engine agy` 時外掛會忽略 `--model`/`--effort`。
+> `--model` 與 `--effort` 只由 **gemini** 引擎管理。`--engine agy` 目前讓 AGY 使用其 configured/default model；本外掛不會把 Gemini aliases 或 effort tiers 翻譯成 AGY 參數。
 
 > **AGY 紀錄恢復已於 Windows 與 macOS 驗證通過；Linux 為回報可用。** 因 `agy --print` 不透過 pipe 輸出（上游 [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466)——已於 macOS agy 1.0.7 重現：pipe 下 stdout 為 0 bytes），外掛改從磁碟上的「brain」紀錄恢復回應——`~/.gemini/antigravity-cli/brain`（Windows 1.0.3 與 macOS 1.0.7，皆已驗證、同一路徑）或 `~/.antigravity-cli/brain`（Linux 1.0.2，回報）。若 `--engine agy` 回報找不到 brain 根目錄，請先執行一次 `agy` 讓其建立該目錄，或開 issue 回報實際位置。
 
@@ -272,7 +297,7 @@ Claude Code
 | `/codex:adversarial-review` | `/gemini:adversarial-review` | **最佳等效** — 對同一 diff target 施以對抗性 prompt |
 | `/codex:rescue` | `/gemini:rescue` | **1:1 對等** — 相同的 forwarder／subagent 合約與旗標 |
 | `/codex:status` | `/gemini:status` | **1:1 對等** — 相同工作模型；`--all` 跨 Claude session |
-| `/codex:result` | `/gemini:result` | **Gemini 專屬差異** — 顯示 Gemini session id 與 `gemini resume` |
+| `/codex:result` | `/gemini:result` | **Gemini 專屬差異** — 顯示 Gemini session id 與 `gemini --resume` |
 | `/codex:cancel` | `/gemini:cancel` | **1:1 對等** — 相同的 process-tree 終止（POSIX 與 Windows） |
 
 ### Codex app server 與 Gemini CLI adapter
@@ -280,7 +305,7 @@ Claude Code
 - **執行時**：Codex 使用常駐 app-server，具原生審查與持久 thread。本外掛則於*每次命令*直接呼叫 Gemini CLI（無共享執行時）；AGY 為選用備援。
 - **標準審查**：Codex 外掛之 `/codex:review` 為*原生*審查器；本外掛之 `/gemini:review` 為 **prompt／CLI adapter 等效實作**——將 diff 連同務實審查 prompt 送交 Gemini 並解析回傳之結構化 JSON，並非原生 Gemini 審查器。
 - **沙箱**：Codex 提供 `read-only`／`workspace-write` 沙箱。Gemini 無對應沙箱；寫入權由 `--write`（`--yolo`）把關，否則以 prompt 強制唯讀紀律。（不採 `--approval-mode plan`：其需 TTY，與 stdin 提示傳遞衝突。）
-- **Thread／session 接續**：Codex 於 app-server 持久化 thread。本外掛之接續依賴自 JSON 信封擷取之 Gemini CLI **session id**；`/gemini:result` 會印出 `gemini resume <session-id>`，而 `--resume-last` 接續*當前 Claude session* 之最新 thread。
+- **Thread／session 接續**：Codex 於 app-server 持久化 thread。本外掛之接續依賴自 JSON 信封擷取之 Gemini CLI **session id**；`/gemini:result` 會印出 `gemini --resume <session-id>`，而 `--resume-last` 接續*當前 Claude session* 之最新 thread。
 
 ---
 
@@ -300,7 +325,7 @@ Claude Code
 
 以下為已記錄之非阻塞限制——詳見所連結之章節：
 
-- **gemini CLI 不提供 Gemini 3.5，且免費 CLI 於 2026-06-18 終止。** `gemini-3.5-*` 於 CLI 0.44.1 回 404（改走 AGY）；不被提供之 model id 會優雅降級至 GA fallback `gemini-2.5-flash`。2026-06-18 後免費／個人版 CLI 層級終止。詳見 [模型別名說明](#模型別名說明) 與 [docs/MODEL_COMPARISON.md](docs/MODEL_COMPARISON.md)。
+- **模型與存取可用性會漂移。** Google 已宣布 2026-06-18 consumer Gemini CLI transition；Gemini CLI 提供的 model IDs 也會隨版本變動。對不可用的 Gemini model ID，本外掛保留 GA fallback。詳見 [模型別名說明](#模型別名說明) 與 [docs/MODEL_COMPARISON.md](docs/MODEL_COMPARISON.md)。
 - **`/gemini:review` 為 prompt／CLI adapter，非原生審查器。** 其將 diff 連同審查 prompt 送出並解析結構化 JSON，而非透過 app-server 審查器，故反饋深度有別於原生。詳見 [Codex app server 與 Gemini CLI adapter](#codex-app-server-與-gemini-cli-adapter)。
 
 ---

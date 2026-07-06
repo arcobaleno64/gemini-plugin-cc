@@ -28,7 +28,7 @@ Model selection guidance (`<model_selection>` block):
 - Debug or fix tasks → `--effort high` (→ gemini-3.1-pro-preview)
 - Research or review tasks → `--effort medium` (→ gemini-3-flash-preview)
 - Quick formatting or structure tasks → `--effort low` (→ gemini-3-flash-preview)
-- AGY engine: locked to Gemini 3.5 Flash (High); `--model` and `--effort` are both ignored. Use AGY for speed when a fixed, high-capability model is acceptable.
+- AGY engine: this plugin currently leaves model choice to AGY's configured/default behavior. `--model` and `--effort` are gemini-engine controls here and are not translated to AGY arguments.
 
 When to add blocks:
 - Coding or debugging: add `completeness_contract`, `verification_loop`, and `missing_context_gating`.
@@ -53,4 +53,4 @@ Prompt assembly checklist:
 
 - [references/gemini-prompt-blocks.md](references/gemini-prompt-blocks.md) — the reusable XML block catalogue (including `json_output_contract` and `model_selection`).
 - [references/gemini-prompt-recipes.md](references/gemini-prompt-recipes.md) — end-to-end templates for diagnosis, narrow fix, review, research, and prompt-patching.
-- [references/gemini-prompt-antipatterns.md](references/gemini-prompt-antipatterns.md) — failure modes to avoid, including Gemini/AGY-specific ones (AGY ignores `--model`/`--effort`; AGY has no pipeable stdout).
+- [references/gemini-prompt-antipatterns.md](references/gemini-prompt-antipatterns.md) — failure modes to avoid, including Gemini/AGY-specific ones (plugin-managed model selection is gemini-only; AGY has no pipeable stdout).

@@ -23,8 +23,8 @@ const GA_FALLBACK_MODEL = "gemini-2.5-flash";
 // back instead of hard-failing. The CLI surfaces this as `ModelNotFoundError` /
 // `code: 404` on stderr and, with --output-format json, an envelope carrying
 // `{ error: { message: "Requested entity was not found." } }` instead of
-// `response`. Preview/retired ids and CLI-version skew (e.g. gemini-3.5-flash is
-// not served by CLI 0.44.1) are the common triggers. Scoped narrowly to
+// `response`. Preview/retired ids and CLI-version skew are the common triggers.
+// Scoped narrowly to
 // model-not-found so auth/quota errors are NOT silently retried.
 function isModelNotFoundError(rawStdout, rawStderr, parsedEnvelope = null) {
   const text = `${rawStdout ?? ""}\n${rawStderr ?? ""}`;
@@ -134,11 +134,11 @@ export async function runGeminiTurn(cwd, options = {}) {
   const engineInfo = detectEngine(requestedEngine ?? null);
 
   if (engineInfo.engine === "agy") {
-    // `agy --print` is hardcoded to Gemini 3.5 Flash (High) and exposes no
-    // --model/--effort flag (env / settings.json cannot override it), so both are
-    // ignored here. Other/higher tiers are only reachable via the gemini engine.
+    // AGY versions have their own model surface, but Gemini aliases / effort
+    // tiers are gemini-engine concepts. Until this plugin has an explicit AGY
+    // mapping contract, leave model choice to AGY's configured/default behavior.
     if (model || effort) {
-      process.stderr.write(`[gemini-companion] Note: AGY's --print is locked to Gemini 3.5 Flash (High) and has no model/effort flag; ignoring --model/--effort. Use --engine gemini for other models.\n`);
+      process.stderr.write(`[gemini-companion] Note: --engine agy currently uses AGY's configured/default model; this plugin does not translate --model/--effort to AGY arguments. Use --engine gemini for plugin-managed model selection.\n`);
     }
     model = null;
   } else {
@@ -323,9 +323,9 @@ export async function runGeminiReview(cwd, options = {}) {
   let modelFallbackNote = null;
 
   // Graceful degradation (gemini engine): if the requested model id is not found
-  // (preview/retired, or absent on this CLI version — e.g. gemini-3.5-flash on
-  // 0.44.1), retry ONCE on the GA fallback so the user still gets a review
-  // instead of a hard failure — and surface the substitution loudly.
+  // (preview/retired, or absent on this CLI version), retry ONCE on the GA
+  // fallback so the user still gets a review instead of a hard failure — and
+  // surface the substitution loudly.
   if (engineInfo.engine === "gemini" && model && model !== GA_FALLBACK_MODEL && isModelNotFoundError(rawStdout, rawStderr, tryParseJsonFromText(rawStdout))) {
     process.stderr.write(`[gemini-companion] Model '${model}' is unavailable on this gemini CLI (model-not-found); retrying review on GA fallback '${GA_FALLBACK_MODEL}'.\n`);
     const fbArgs = buildCliArgs("gemini", {

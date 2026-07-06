@@ -1,17 +1,18 @@
 # Model vs Harness — what actually drives the gap
 
 > Scope: the models each plugin drives — **Gemini** (this plugin) vs **OpenAI Codex/GPT** (`codex-plugin-cc`).
-> Date: 2026-06-02 ｜ Method: live single-shot runs on identical prompt + diff (model isolation), contrasted with each tool's native harness, plus web-confirmed model facts. Setting the plugin features aside.
+> Date: 2026-06-02 ｜ Method: live single-shot runs on identical prompt + diff (model isolation), contrasted with each tool's native harness, plus model facts available at that time. Setting the plugin features aside.
+> Currentness note: this is a dated snapshot, not a rolling model leaderboard. On 2026-07-06, npm reports `@google/gemini-cli` latest as 0.49.0 and local `agy` 1.0.16 exposes its own model surface, so do not treat the 0.44.1 / AGY 1.0.4 observations below as current global facts.
 > Honesty note: proprietary model "strength" is not precisely measurable; vendor pages were partly fetch-blocked (403) so some benchmark numbers come from independent leaderboards / reputable secondary reporting. Treat single-digit gaps as noise-adjacent.
 
 ---
 
 ## TL;DR
 
-1. **Raw single-shot review quality is close and mixed** between the latest Gemini and OpenAI coding models — all caught the headline bugs; they differ only in the long tail.
+1. **Raw single-shot review quality was close and mixed in this 2026-06-02 snapshot** — all tested models caught the headline bugs; they differed only in the long tail.
 2. **Most of the gap people attribute to "model" is actually harness.** Codex's native reviewer is *agentic* (it explores the repo); this plugin's review is *single-shot prompt over a diff*. Give Gemini the same agentic loop and most of the observed difference closes.
-3. **On multi-step agentic benchmarks (Terminal-Bench), OpenAI currently leads by a real margin; on competitive/algorithmic coding (LiveCodeBench), Gemini leads.** Split, not one-sided.
-4. **Model availability is a hard local constraint:** Gemini 3.5 (the current GA flagship on the API) is **not served by the gemini CLI 0.44.1** (404); it is reachable only through the **AGY** engine (fixed model, no selection).
+3. **The benchmark snapshot was split:** OpenAI led on the multi-step agentic Terminal-Bench numbers available then; Gemini led the competitive/algorithmic LiveCodeBench numbers cited then.
+4. **Model availability is a hard local constraint:** the 2026-06-02 gemini CLI 0.44.1 probe returned `404 ModelNotFound` for `gemini-3.5-*`. Newer CLI releases may differ, so availability claims must be re-probed.
 
 ---
 
@@ -57,7 +58,7 @@ Reading: the big gap is on **multi-step agentic execution** (Terminal-Bench), wh
 
 ## D. Model availability — the local reality (transparency)
 
-Probed on this machine (gemini CLI **0.44.1**, the latest on npm), 2026-06-02:
+Probed on this machine (gemini CLI **0.44.1**, then-current on npm), 2026-06-02:
 
 | Model id | gemini CLI 0.44.1 | Note |
 |---|:-:|---|
@@ -65,12 +66,12 @@ Probed on this machine (gemini CLI **0.44.1**, the latest on npm), 2026-06-02:
 | `gemini-3-flash-preview` | ✅ served | preview |
 | `gemini-3.1-pro-preview` | ✅ served | preview; gemini CLI's configured default |
 | `gemini-3.1-flash-lite` | ✅ served | GA |
-| **`gemini-3.5-flash`** | ❌ **404 ModelNotFound** | GA on the API, **not on the CLI**; reachable via **AGY** (fixed model) |
-| **`gemini-3.5-pro`** | ❌ **404** | GA imminent; not on the CLI |
+| **`gemini-3.5-flash`** | ❌ **404 ModelNotFound** | Not served by this CLI version in this probe |
+| **`gemini-3.5-pro`** | ❌ **404** | Not served by this CLI version in this probe |
 
-- **AGY (antigravity 1.0.4)** exposes **no `--model`/`--effort`** flag (verified via `agy --help`); its model is backend-fixed (documented as Gemini 3.5 Flash, High). So Gemini 3.5 Flash is reachable only via AGY, and not tunable.
+- **AGY (antigravity 1.0.4)** exposed **no `--model`/`--effort`** flag in the original 2026-06-02 probe. By 2026-07-06, local AGY 1.0.16 exposes `--model` and `agy models`; this plugin still does not translate Gemini aliases / effort tiers to AGY arguments.
 - The plugin therefore points `flash` at `gemini-3-flash-preview` (served) and **gracefully degrades** to the GA `gemini-2.5-flash` if a requested id 404s — see the model-not-found fallback in `lib/gemini.mjs`.
-- Heads-up: free/personal gemini CLI access ends **2026-06-18**; after that the gemini engine requires a paid tier, and AGY becomes the free path.
+- Heads-up: Google announced the consumer Gemini CLI transition for **2026-06-18**; after that date, access depends on the user's tier and current Google CLI policy.
 
 ---
 
@@ -78,4 +79,4 @@ Probed on this machine (gemini CLI **0.44.1**, the latest on npm), 2026-06-02:
 
 - **Don't chase raw model parity** — it is close, and the model tier is Google/OpenAI's to move (choose it with `--effort`/`--model`, not code).
 - **Do close the harness gap** — giving the Gemini review path agentic repo exploration (opt-in) recovers most of the observed difference. This is the highest-leverage, in-our-control improvement.
-- **Be honest about availability** — 3.5 via AGY only; graceful fallback when ids drift. Documented in the README so user expectations match reality.
+- **Be honest about availability** — treat model availability as version-specific and re-probe before making current claims. The runtime keeps graceful fallback when Gemini IDs drift.

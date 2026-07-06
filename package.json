@@ -3,7 +3,38 @@
   "version": "0.6.6",
   "private": true,
   "type": "module",
-  "description": "Use Gemini/AGY from Claude Code to review code or delegate tasks.",
+  "description": "Use Gemini CLI or Antigravity CLI (agy) inside Claude Code for task delegation, code review, and adversarial review.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arcobaleno64/gemini-plugin-cc.git"
+  },
+  "homepage": "https://github.com/arcobaleno64/gemini-plugin-cc#readme",
+  "bugs": {
+    "url": "https://github.com/arcobaleno64/gemini-plugin-cc/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "gemini-cli",
+    "antigravity-cli",
+    "agy",
+    "google-gemini",
+    "google-antigravity",
+    "ai-coding-agent",
+    "coding-agent",
+    "agentic-coding",
+    "code-review",
+    "adversarial-review",
+    "developer-tools",
+    "cli",
+    "javascript",
+    "nodejs",
+    "llm",
+    "plugin",
+    "task-delegation",
+    "ai-code-review",
+    "open-source"
+  ],
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
