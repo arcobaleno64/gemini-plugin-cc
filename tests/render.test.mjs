@@ -183,3 +183,39 @@ test("renderStoredJobResult reports when no payload was stored", () => {
   const out = renderStoredJobResult({ id: "task-9", status: "failed", title: "X" }, {});
   assert.match(out, /No captured result payload was stored/);
 });
+
+test("renderJobStatusReport includes structured failure metadata", () => {
+  const out = renderJobStatusReport({
+    id: "task-failed",
+    status: "failed",
+    title: "Gemini Task",
+    failure: {
+      category: "rate-limit",
+      retryable: true,
+      summary: "Rate limit exceeded.",
+      nextStep: "Retry later."
+    }
+  });
+
+  assert.match(out, /Failure: rate-limit \(retryable\)/);
+  assert.match(out, /Rate limit exceeded\./);
+  assert.match(out, /Next step: Retry later\./);
+});
+
+test("renderStoredJobResult includes stored failure metadata when there is no output", () => {
+  const out = renderStoredJobResult(
+    { id: "task-failed", status: "failed", title: "Gemini Task" },
+    {
+      failure: {
+        category: "auth",
+        retryable: false,
+        summary: "Gemini authentication failed.",
+        nextStep: "Run `gemini` once to authenticate."
+      }
+    }
+  );
+
+  assert.match(out, /Failure: auth \(not retryable\)/);
+  assert.match(out, /Gemini authentication failed\./);
+  assert.match(out, /Run `gemini` once to authenticate\./);
+});

@@ -11,7 +11,9 @@ import {
   resolveStateDir,
   resolveStateFile,
   saveState,
-  generateJobId
+  generateJobId,
+  writeJobFile,
+  readJobFile
 } from "../plugins/gemini/scripts/lib/state.mjs";
 
 test("resolveStateDir uses a temp-backed per-workspace directory", () => {
@@ -83,4 +85,32 @@ test("generateJobId produces a prefixed id with a crypto-random suffix", () => {
   const id = generateJobId("task");
   assert.match(id, /^task-[0-9a-z]+-[0-9a-f]{10}$/);
   assert.notEqual(generateJobId("task"), generateJobId("task"));
+});
+
+test("state and job writes leave parseable JSON", () => {
+  const workspace = makeTempDir();
+  const stateFile = resolveStateFile(workspace);
+
+  saveState(workspace, {
+    version: 1,
+    config: { stopReviewGateEnabled: true },
+    jobs: [{ id: "task-1", status: "completed", updatedAt: "2026-01-01T00:00:00.000Z" }]
+  });
+  const jobFile = writeJobFile(workspace, "task-1", { id: "task-1", status: "completed" });
+
+  assert.equal(JSON.parse(fs.readFileSync(stateFile, "utf8")).jobs[0].id, "task-1");
+  assert.equal(JSON.parse(fs.readFileSync(jobFile, "utf8")).status, "completed");
+});
+
+test("readJobFile fails closed for corrupted job JSON", () => {
+  const workspace = makeTempDir();
+  const jobFile = resolveJobFile(workspace, "task-corrupt");
+  fs.writeFileSync(jobFile, "{ not-json", "utf8");
+
+  const job = readJobFile(jobFile);
+
+  assert.equal(job.id, "task-corrupt");
+  assert.equal(job.status, "failed");
+  assert.equal(job.failure.category, "invalid-json");
+  assert.match(job.errorMessage, /Unreadable job file/i);
 });

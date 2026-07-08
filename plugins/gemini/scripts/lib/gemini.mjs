@@ -4,6 +4,7 @@ import path from "node:path";
 import process from "node:process";
 
 import { buildCliArgs, detectEngine, mapEffortToModel, normalizeRequestedModel } from "./engine.mjs";
+import { classifyCliFailure } from "./failures.mjs";
 import { binaryAvailable, runCommand } from "./process.mjs";
 import { resolveAgyBrainRoot, listConvDirs, recoverAgyResponse } from "./agy-transcript.mjs";
 
@@ -217,6 +218,7 @@ export async function runGeminiTurn(cwd, options = {}) {
   let finalMessage = rawStdout.trim();
   let threadId = null;
   let reasoningSummary = extractReasoningSummary(rawStderr) ?? null;
+  let recoveryFailure = null;
 
   if (engineInfo.engine === "agy") {
     // agy wrote the response to its transcript, not stdout (#27466). Recover it
@@ -227,6 +229,7 @@ export async function runGeminiTurn(cwd, options = {}) {
         `AGY produced no recoverable response (${rec.reason}). agy --print does not pipe output (google-gemini/gemini-cli#27466); transcript recovery failed.`
       );
     }
+    recoveryFailure = rec.failure ?? null;
     if (!rec.confident) {
       process.stderr.write(`[gemini-companion] Warning: AGY transcript match is not certain (${rec.reason}). Verify the response corresponds to this run.\n`);
     }
@@ -247,7 +250,22 @@ export async function runGeminiTurn(cwd, options = {}) {
     }
   }
 
+  if (!finalMessage && exitCode === 0) {
+    exitCode = 1;
+  }
+
   const touchedFiles = extractTouchedFiles(finalMessage);
+  const failure = recoveryFailure ?? (exitCode !== 0 || !finalMessage
+    ? classifyCliFailure({
+        engine: engineInfo.engine,
+        status: exitCode,
+        signal: result.signal,
+        error: result.error,
+        stdout: finalMessage || rawStdout,
+        stderr: rawStderr,
+        noOutput: !finalMessage
+      })
+    : null);
 
   onProgress?.({ message: exitCode === 0 ? "Turn completed." : "Turn failed.", phase: exitCode === 0 ? "done" : "failed" });
 
@@ -260,6 +278,7 @@ export async function runGeminiTurn(cwd, options = {}) {
     engine: engineInfo.engine,
     stderr: rawStderr,
     modelFallback: modelFallbackNote,
+    ...(failure ? { failure } : {})
   };
 }
 
@@ -348,6 +367,7 @@ export async function runGeminiReview(cwd, options = {}) {
 
   let reviewJson = null;
   let reviewText = rawStdout.trim();
+  let recoveryFailure = null;
 
   if (engineInfo.engine === "agy") {
     // agy wrote the review to its transcript, not stdout (#27466). Recover it and
@@ -358,6 +378,7 @@ export async function runGeminiReview(cwd, options = {}) {
         `AGY produced no recoverable review (${rec.reason}). agy --print does not pipe output (google-gemini/gemini-cli#27466); transcript recovery failed.`
       );
     }
+    recoveryFailure = rec.failure ?? null;
     if (!rec.confident) {
       process.stderr.write(`[gemini-companion] Warning: AGY transcript match is not certain (${rec.reason}). Verify the review corresponds to this run.\n`);
     }
@@ -389,6 +410,23 @@ export async function runGeminiReview(cwd, options = {}) {
     reviewJson = tryParseJsonFromText(rawStdout);
   }
 
+  if (!reviewText && exitCode === 0) {
+    exitCode = 1;
+  }
+
+  const failure = recoveryFailure ?? (exitCode !== 0 || !reviewText || !reviewJson
+    ? classifyCliFailure({
+        engine: engineInfo.engine,
+        status: exitCode,
+        signal: result.signal,
+        error: result.error,
+        stdout: reviewText || rawStdout,
+        stderr: rawStderr,
+        noOutput: !reviewText,
+        invalidJson: Boolean(reviewText && !reviewJson)
+      })
+    : null);
+
   onProgress?.({ message: exitCode === 0 ? "Review completed." : "Review failed.", phase: exitCode === 0 ? "done" : "failed" });
 
   return {
@@ -399,6 +437,7 @@ export async function runGeminiReview(cwd, options = {}) {
     engine: engineInfo.engine,
     stderr: rawStderr,
     modelFallback: modelFallbackNote,
+    ...(failure ? { failure } : {})
   };
 }
 

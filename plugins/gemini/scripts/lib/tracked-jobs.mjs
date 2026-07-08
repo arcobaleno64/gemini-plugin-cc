@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import process from "node:process";
 
+import { classifyCliFailure } from "./failures.mjs";
 import { readJobFile, resolveJobFile, resolveJobLogFile, upsertJob, writeJobFile } from "./state.mjs";
 
 export const SESSION_ID_ENV = "GEMINI_COMPANION_SESSION_ID";
@@ -155,6 +156,14 @@ export async function runTrackedJob(job, runner, options = {}) {
     const execution = await runner();
     const completionStatus = execution.exitStatus === 0 ? "completed" : "failed";
     const completedAt = nowIso();
+    const failure = completionStatus === "failed"
+      ? (execution.failure ?? classifyCliFailure({
+          status: execution.exitStatus,
+          stderr: execution.payload?.gemini?.stderr ?? execution.payload?.stderr ?? "",
+          stdout: execution.payload?.rawOutput ?? execution.payload?.gemini?.stdout ?? "",
+          errorMessage: execution.summary
+        }))
+      : null;
     writeJobFile(job.workspaceRoot, job.id, {
       ...runningRecord,
       status: completionStatus,
@@ -165,7 +174,8 @@ export async function runTrackedJob(job, runner, options = {}) {
       phase: completionStatus === "completed" ? "done" : "failed",
       completedAt,
       result: execution.payload,
-      rendered: execution.rendered
+      rendered: execution.rendered,
+      ...(failure ? { failure } : {})
     });
     upsertJob(job.workspaceRoot, {
       id: job.id,
@@ -176,12 +186,14 @@ export async function runTrackedJob(job, runner, options = {}) {
       summary: execution.summary,
       phase: completionStatus === "completed" ? "done" : "failed",
       pid: null,
-      completedAt
+      completedAt,
+      ...(failure ? { failure } : {})
     });
     appendLogBlock(options.logFile ?? job.logFile ?? null, "Final output", execution.rendered);
     return execution;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const failure = classifyCliFailure(error?.failure ?? { error, errorMessage });
     const existing = readStoredJobOrNull(job.workspaceRoot, job.id) ?? runningRecord;
     const completedAt = nowIso();
     writeJobFile(job.workspaceRoot, job.id, {
@@ -191,7 +203,8 @@ export async function runTrackedJob(job, runner, options = {}) {
       errorMessage,
       pid: null,
       completedAt,
-      logFile: options.logFile ?? job.logFile ?? existing.logFile ?? null
+      logFile: options.logFile ?? job.logFile ?? existing.logFile ?? null,
+      failure
     });
     upsertJob(job.workspaceRoot, {
       id: job.id,
@@ -199,7 +212,8 @@ export async function runTrackedJob(job, runner, options = {}) {
       phase: "failed",
       pid: null,
       errorMessage,
-      completedAt
+      completedAt,
+      failure
     });
     throw error;
   }

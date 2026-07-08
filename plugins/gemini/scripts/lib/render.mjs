@@ -91,6 +91,21 @@ function formatJobLine(job) {
   return parts.join(" | ");
 }
 
+function pushFailureDetails(lines, failure, indent = "") {
+  if (!failure || typeof failure !== "object") {
+    return;
+  }
+  const category = failure.category ?? "unknown";
+  const retryLabel = failure.retryable ? "retryable" : "not retryable";
+  lines.push(`${indent}Failure: ${category} (${retryLabel})`);
+  if (failure.summary) {
+    lines.push(`${indent}Summary: ${failure.summary}`);
+  }
+  if (failure.nextStep) {
+    lines.push(`${indent}Next step: ${failure.nextStep}`);
+  }
+}
+
 function escapeMarkdownCell(value) {
   return String(value ?? "")
     .replace(/\|/g, "\\|")
@@ -131,6 +146,7 @@ function pushJobDetails(lines, job, options = {}) {
   if (job.summary) {
     lines.push(`  Summary: ${job.summary}`);
   }
+  pushFailureDetails(lines, job.failure, "  ");
   if (job.phase) {
     lines.push(`  Phase: ${job.phase}`);
   }
@@ -238,6 +254,11 @@ export function renderReviewResult(parsedResult, meta) {
       lines.push("", "Raw final message:", "", "```text", parsedResult.rawOutput, "```");
     }
 
+    if (parsedResult.failure) {
+      lines.push("");
+      pushFailureDetails(lines, parsedResult.failure);
+    }
+
     appendReasoningSection(lines, meta.reasoningSummary ?? parsedResult.reasoningSummary);
 
     return `${lines.join("\n").trimEnd()}\n`;
@@ -304,11 +325,22 @@ export function renderReviewResult(parsedResult, meta) {
 export function renderTaskResult(parsedResult, meta) {
   const rawOutput = typeof parsedResult?.rawOutput === "string" ? parsedResult.rawOutput : "";
   if (rawOutput) {
-    return rawOutput.endsWith("\n") ? rawOutput : `${rawOutput}\n`;
+    const output = rawOutput.endsWith("\n") ? rawOutput : `${rawOutput}\n`;
+    if (!parsedResult?.failure) {
+      return output;
+    }
+    const lines = [output.trimEnd(), ""];
+    pushFailureDetails(lines, parsedResult.failure);
+    return `${lines.join("\n").trimEnd()}\n`;
   }
 
   const message = String(parsedResult?.failureMessage ?? "").trim() || "Gemini did not return a final message.";
-  return `${message}\n`;
+  if (!parsedResult?.failure) {
+    return `${message}\n`;
+  }
+  const lines = [message, ""];
+  pushFailureDetails(lines, parsedResult.failure);
+  return `${lines.join("\n").trimEnd()}\n`;
 }
 
 export function renderStatusReport(report) {
@@ -379,6 +411,7 @@ export function renderStoredJobResult(job, storedJob) {
   const threadId = storedJob?.threadId ?? job.threadId ?? null;
   const engine = storedJob?.engine ?? job?.engine ?? null;
   const resume = resumeInfo(engine, threadId);
+  const failure = storedJob?.failure ?? storedJob?.result?.failure ?? job?.failure ?? null;
   if (isStructuredReviewStoredResult(storedJob) && storedJob?.rendered) {
     const output = storedJob.rendered.endsWith("\n") ? storedJob.rendered : `${storedJob.rendered}\n`;
     if (!resume) {
@@ -393,10 +426,13 @@ export function renderStoredJobResult(job, storedJob) {
     "";
   if (rawOutput) {
     const output = rawOutput.endsWith("\n") ? rawOutput : `${rawOutput}\n`;
+    const failureLines = [];
+    pushFailureDetails(failureLines, failure);
+    const failureOutput = failureLines.length ? `\n${failureLines.join("\n")}\n` : "";
     if (!resume) {
-      return output;
+      return `${output}${failureOutput}`;
     }
-    return `${output}\n${resume.idLabel}: ${threadId}\n${resume.resumeLabel}: ${resume.command}\n`;
+    return `${output}${failureOutput}\n${resume.idLabel}: ${threadId}\n${resume.resumeLabel}: ${resume.command}\n`;
   }
 
   if (storedJob?.rendered) {
@@ -421,6 +457,11 @@ export function renderStoredJobResult(job, storedJob) {
 
   if (job.summary) {
     lines.push(`Summary: ${job.summary}`);
+  }
+
+  if (failure) {
+    lines.push("");
+    pushFailureDetails(lines, failure);
   }
 
   if (job.errorMessage) {

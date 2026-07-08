@@ -1,10 +1,12 @@
 import process from "node:process";
 
+import { createFailureError } from "./failures.mjs";
 import { binaryAvailable, resolveBinaryPath } from "./process.mjs";
 import { EFFORT_MODEL_MAP, MODEL_ALIASES, VALID_EFFORT_LEVELS } from "./model-map.mjs";
 import { resolveAgyBrainRoot } from "./agy-transcript.mjs";
 
 export const ENGINE_ENV = "GEMINI_ENGINE";
+export const AGY_POSITIONAL_PROMPT_SAFE_LIMIT = 24_000;
 
 // Model aliases and effort tiers live in model-map.mjs (single source of truth,
 // verified against the README table). Re-exported here for existing importers.
@@ -95,11 +97,32 @@ function formatAgyTimeout(timeoutMs) {
   return `${minutes}m`;
 }
 
+function assertAgyPromptSafe(prompt) {
+  const value = String(prompt ?? "");
+  if (value.includes("\0")) {
+    throw createFailureError({
+      promptNul: true,
+      engine: "agy",
+      summary: "AGY prompt contains a NUL byte and cannot be passed as a positional argument.",
+      nextStep: "Remove NUL bytes from the prompt or use `--engine gemini`, which sends prompts over stdin."
+    });
+  }
+  if (value.length > AGY_POSITIONAL_PROMPT_SAFE_LIMIT) {
+    throw createFailureError({
+      promptTooLong: true,
+      engine: "agy",
+      summary: `AGY positional prompt is ${value.length} characters, above the ${AGY_POSITIONAL_PROMPT_SAFE_LIMIT.toLocaleString("en-US")} character safe limit.`,
+      nextStep: "Shorten the prompt or use `--engine gemini`, which sends prompts over stdin."
+    });
+  }
+}
+
 export function buildCliArgs(engine, options = {}) {
   const { prompt = "", model, write = false, resumeLast = false, outputJson = false, approvalModePlan = false, timeoutMs, useStdin = false } = options;
 
   if (engine === "agy") {
     // AGY does not support stdin; prompt must be passed as a positional argument
+    assertAgyPromptSafe(prompt);
     const args = ["--print", prompt];
     if (write) args.push("--dangerously-skip-permissions");
     if (resumeLast) args.push("--continue");

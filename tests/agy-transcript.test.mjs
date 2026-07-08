@@ -131,6 +131,8 @@ test("recoverAgyResponse fails loud-able when no brain root is available", () =>
   assert.equal(rec.response, null);
   assert.equal(rec.confident, false);
   assert.match(rec.reason, /brain root/i);
+  assert.equal(rec.failure.category, "transcript-missing");
+  assert.equal(rec.failure.retryable, false);
 });
 
 test("recoverAgyResponse reports when no new conversation dir appears", () => {
@@ -140,6 +142,27 @@ test("recoverAgyResponse reports when no new conversation dir appears", () => {
   const rec = recoverAgyResponse(root, before); // nothing new added
   assert.equal(rec.response, null);
   assert.match(rec.reason, /no new conversation dir/i);
+  assert.equal(rec.failure.category, "transcript-missing");
+});
+
+test("recoverAgyResponse marks ambiguous transcript recovery", () => {
+  const root = tmpRoot();
+  const before = listConvDirs(root);
+  writeTranscript(root, "older", realRows("OLDER", "DONE"));
+  writeTranscript(root, "newer", realRows("NEWER", "DONE"));
+  const rec = recoverAgyResponse(root, before);
+  assert.equal(rec.confident, false);
+  assert.equal(rec.failure.category, "transcript-ambiguous");
+});
+
+test("recoverAgyResponse marks non-DONE transcripts as missing/incomplete", () => {
+  const root = tmpRoot();
+  const before = listConvDirs(root);
+  writeTranscript(root, "fresh", realRows("PARTIAL", "IN_PROGRESS"));
+  const rec = recoverAgyResponse(root, before);
+  assert.equal(rec.done, false);
+  assert.equal(rec.failure.category, "transcript-missing");
+  assert.match(rec.failure.summary, /transcript/i);
 });
 
 test("listConvDirs maps conversation dirs and ignores files", () => {

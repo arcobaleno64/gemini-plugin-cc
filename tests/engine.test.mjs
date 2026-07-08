@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { MODEL_ALIASES, normalizeRequestedModel, mapEffortToModel } from "../plugins/gemini/scripts/lib/engine.mjs";
+import { MODEL_ALIASES, normalizeRequestedModel, mapEffortToModel, buildCliArgs } from "../plugins/gemini/scripts/lib/engine.mjs";
 
 // These two IDs return 404 ModelNotFound on the gemini CLI (verified 0.44.1).
 // No alias or effort tier may resolve to them.
@@ -44,4 +44,18 @@ test("unknown / explicit model strings pass through unchanged", () => {
   assert.equal(normalizeRequestedModel("some-custom-model"), "some-custom-model");
   assert.equal(normalizeRequestedModel(null), null);
   assert.equal(normalizeRequestedModel(""), null);
+});
+
+test("agy positional prompt rejects NUL bytes before argv construction", () => {
+  assert.throws(
+    () => buildCliArgs("agy", { prompt: "hello\0world" }),
+    (error) => error.failure?.category === "prompt-too-long" && /NUL/i.test(error.message)
+  );
+});
+
+test("agy positional prompt rejects prompts above the safe Windows argv limit", () => {
+  assert.throws(
+    () => buildCliArgs("agy", { prompt: "x".repeat(24_001) }),
+    (error) => error.failure?.category === "prompt-too-long" && /24,000|24000/.test(error.message)
+  );
 });

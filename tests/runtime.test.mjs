@@ -632,6 +632,14 @@ test("task surfaces a failed gemini turn as a non-zero exit", () => {
 
   const state = JSON.parse(fs.readFileSync(path.join(resolveStateDir(repo), "state.json"), "utf8"));
   assert.equal(state.jobs[0].status, "failed");
+  assert.equal(state.jobs[0].failure.category, "no-output");
+  assert.equal(typeof state.jobs[0].failure.nextStep, "string");
+
+  const status = JSON.parse(run("node", [SCRIPT, "status", "--json"], { cwd: repo, env: buildEnv(binDir) }).stdout);
+  assert.equal(status.latestFinished.failure.category, "no-output");
+
+  const stored = JSON.parse(run("node", [SCRIPT, "result", state.jobs[0].id, "--json"], { cwd: repo, env: buildEnv(binDir) }).stdout);
+  assert.equal(stored.storedJob.failure.category, "no-output");
 });
 
 test("task rejects an unknown engine", () => {

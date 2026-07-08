@@ -407,14 +407,15 @@ async function executeReviewRun(request) {
   });
 
   const parsed = result.reviewJson
-    ? { parsed: result.reviewJson, rawOutput: result.reviewText, parseError: null }
-    : { parsed: null, rawOutput: result.reviewText, parseError: "Could not parse structured JSON from review output." };
+    ? { parsed: result.reviewJson, rawOutput: result.reviewText, parseError: null, failure: result.failure ?? null }
+    : { parsed: null, rawOutput: result.reviewText, parseError: "Could not parse structured JSON from review output.", failure: result.failure ?? null };
 
   const payload = {
     review: reviewName,
     target: context.target,
-    gemini: { status: result.status, stdout: result.reviewText },
-    result: parsed.parsed
+    gemini: { status: result.status, stdout: result.reviewText, stderr: result.stderr ?? "" },
+    result: parsed.parsed,
+    ...(result.failure ? { failure: result.failure } : {})
   };
 
   const fallbackBanner = result.modelFallback ? `> ⚠️ ${result.modelFallback}\n\n` : "";
@@ -433,7 +434,8 @@ async function executeReviewRun(request) {
     summary: parsed.parsed?.summary ?? parsed.parseError ?? "Review completed.",
     jobTitle: `Gemini ${reviewName}`,
     jobClass: "review",
-    targetLabel: context.target?.label ?? ""
+    targetLabel: context.target?.label ?? "",
+    ...(result.status !== 0 && result.failure ? { failure: result.failure } : {})
   };
 }
 
@@ -465,11 +467,12 @@ async function executeTaskRun(request) {
 
   const rawOutput = result.finalMessage ?? "";
   const failureMessage = result.stderr ?? "";
+  const failure = result.failure ?? null;
   const taskMetadata = buildTaskRunMetadata({ prompt: request.prompt, resumeLast: request.resumeLast });
 
   const fallbackBanner = result.modelFallback ? `${result.modelFallback}\n\n` : "";
   const rendered = fallbackBanner + renderTaskResult(
-    { rawOutput, failureMessage, reasoningSummary: result.reasoningSummary },
+    { rawOutput, failureMessage, reasoningSummary: result.reasoningSummary, failure },
     { title: taskMetadata.title, jobId: request.jobId ?? null, write: Boolean(request.write) }
   );
   const payload = {
@@ -477,7 +480,8 @@ async function executeTaskRun(request) {
     threadId: result.threadId ?? null,
     rawOutput,
     touchedFiles: result.touchedFiles,
-    reasoningSummary: result.reasoningSummary
+    reasoningSummary: result.reasoningSummary,
+    ...(failure ? { failure } : {})
   };
 
   return {
@@ -490,7 +494,8 @@ async function executeTaskRun(request) {
     summary: firstMeaningfulLine(rawOutput, firstMeaningfulLine(failureMessage, `${taskMetadata.title} finished.`)),
     jobTitle: taskMetadata.title,
     jobClass: "task",
-    write: Boolean(request.write)
+    write: Boolean(request.write),
+    ...(result.status !== 0 && failure ? { failure } : {})
   };
 }
 
