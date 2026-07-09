@@ -125,7 +125,16 @@ export function buildCliArgs(engine, options = {}) {
     assertAgyPromptSafe(prompt);
     const args = ["--print", prompt];
     if (write) args.push("--dangerously-skip-permissions");
-    if (resumeLast) args.push("--continue");
+    if (resumeLast) {
+      args.push("--continue");
+    } else if (write) {
+      // Without an active workspace/project, agy 1.1.0 silently writes to its
+      // scratch dir (~/.gemini/antigravity-cli/scratch) instead of `cwd`
+      // (machine-verified 2026-07-09). --new-project binds the session's
+      // workspace to `cwd`. Only on a fresh (non-continuation) write turn —
+      // a resumed conversation already has its original project association.
+      args.push("--new-project");
+    }
     const timeout = formatAgyTimeout(timeoutMs);
     if (timeout) args.push("--print-timeout", timeout);
     return args;

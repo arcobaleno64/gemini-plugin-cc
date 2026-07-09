@@ -59,3 +59,22 @@ test("agy positional prompt rejects prompts above the safe Windows argv limit", 
     (error) => error.failure?.category === "prompt-too-long" && /24,000|24000/.test(error.message)
   );
 });
+
+test("agy write turn adds --new-project so files land in cwd, not agy's scratch dir", () => {
+  const args = buildCliArgs("agy", { prompt: "hello", write: true });
+  assert.ok(args.includes("--dangerously-skip-permissions"));
+  assert.ok(args.includes("--new-project"));
+  assert.ok(!args.includes("--continue"));
+});
+
+test("agy resumed write turn uses --continue instead of --new-project", () => {
+  const args = buildCliArgs("agy", { prompt: "hello", write: true, resumeLast: true });
+  assert.ok(args.includes("--continue"));
+  assert.ok(!args.includes("--new-project"));
+});
+
+test("agy read-only turn adds neither --dangerously-skip-permissions nor --new-project", () => {
+  const args = buildCliArgs("agy", { prompt: "hello" });
+  assert.ok(!args.includes("--dangerously-skip-permissions"));
+  assert.ok(!args.includes("--new-project"));
+});

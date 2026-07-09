@@ -31,6 +31,18 @@
 //     Linux 1.0.2 reported at ~/.antigravity-cli/brain. Timeout grace IS
 //     applied in runGeminiTurn (agy --print-timeout window < the hard spawn
 //     kill).
+//
+// AGY 1.1.0 (2026-07-08): `agy --help` confirms this brain-root path and the
+// four flags this file/engine.mjs depend on are unchanged; 1.1.0's global
+// config-dir fix (~/.gemini/antigravity-cli/ -> ~/.gemini/config/) is about
+// the /agents subagent-definition dir, a different path from the brain root
+// below. Machine-verified 2026-07-09 (Windows): 1.1.0's new default
+// `request-review` mode does NOT stall a headless `--engine agy --write`
+// spawn — --dangerously-skip-permissions still bypasses it. Separately found
+// (and fixed in buildCliArgs via --new-project, see engine.mjs and
+// CHANGELOG): without an active workspace, that same write turn used to
+// silently land its file under this brain root's sibling `scratch/` dir
+// instead of `cwd`.
 
 import fs from "node:fs";
 import os from "node:os";
