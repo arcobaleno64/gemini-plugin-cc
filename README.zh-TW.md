@@ -51,7 +51,7 @@
 |---|---|---|
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
 | Gemini CLI | ≥ 0.40 | `npm install -g @google/gemini-cli` |
-| AGY _(選用)_ | ≥ 1.0.3 | _(安裝指令見下)_ |
+| AGY _(選用)_ | ≥ 1.0.3（1.1.0 已驗證） | _(安裝指令見下)_ |
 | Claude Code | 任意版本 | [claude.ai/code](https://claude.ai/code) |
 
 **安裝 AGY**（選用備援）：`curl -fsSL https://antigravity.google/cli/install.sh | bash`
@@ -235,7 +235,7 @@
 
 > `--model` 與 `--effort` 只由 **gemini** 引擎管理。`--engine agy` 目前讓 AGY 使用其 configured/default model；本外掛不會把 Gemini aliases 或 effort tiers 翻譯成 AGY 參數。
 
-> **AGY 紀錄恢復已於 Windows 與 macOS 驗證通過；Linux 為回報可用。** 因 `agy --print` 不透過 pipe 輸出（上游 [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466)——已於 macOS agy 1.0.7 重現：pipe 下 stdout 為 0 bytes），外掛改從磁碟上的「brain」紀錄恢復回應——`~/.gemini/antigravity-cli/brain`（Windows 1.0.3 與 macOS 1.0.7，皆已驗證、同一路徑）或 `~/.antigravity-cli/brain`（Linux 1.0.2，回報）。若 `--engine agy` 回報找不到 brain 根目錄，請先執行一次 `agy` 讓其建立該目錄，或開 issue 回報實際位置。
+> **AGY 紀錄恢復已於 Windows 與 macOS 驗證通過；Linux 為回報可用。** 因 `agy --print` 不透過 pipe 輸出（上游 [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466)——已於 macOS agy 1.0.7 重現：pipe 下 stdout 為 0 bytes），外掛改從磁碟上的「brain」紀錄恢復回應——`~/.gemini/antigravity-cli/brain`（Windows 1.0.3 與 1.1.0、macOS 1.0.7，皆已驗證、同一路徑）或 `~/.antigravity-cli/brain`（Linux 1.0.2，回報）。若 `--engine agy` 回報找不到 brain 根目錄，請先執行一次 `agy` 讓其建立該目錄，或開 issue 回報實際位置。
 
 ---
 

@@ -50,12 +50,12 @@ import path from "node:path";
 
 import { classifyCliFailure } from "./failures.mjs";
 
-// Candidate brain roots, newest-platform first. Verified: 1.0.3 Windows and
-// 1.0.7 macOS (same root). Reported: 1.0.2 Linux.
+// Candidate brain roots, newest-platform first. Verified: 1.0.3 and 1.1.0
+// Windows, 1.0.7 macOS (same root). Reported: 1.0.2 Linux.
 export function agyBrainRoots() {
   const home = os.homedir();
   return [
-    path.join(home, ".gemini", "antigravity-cli", "brain"), // 1.0.3 Windows + 1.0.7 macOS (verified)
+    path.join(home, ".gemini", "antigravity-cli", "brain"), // 1.0.3/1.1.0 Windows + 1.0.7 macOS (verified)
     path.join(home, ".antigravity-cli", "brain"),           // 1.0.2 Linux (reported)
   ];
 }

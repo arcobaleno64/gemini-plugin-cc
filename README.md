@@ -53,7 +53,7 @@ Compared with AGY-only, multi-host plugins, this project keeps the Gemini CLI pa
 |---|---|---|
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
 | Gemini CLI | ≥ 0.40 | `npm install -g @google/gemini-cli` |
-| AGY _(optional)_ | ≥ 1.0.3 | _(see install note below)_ |
+| AGY _(optional)_ | ≥ 1.0.3 (1.1.0 verified) | _(see install note below)_ |
 | Claude Code | any | [claude.ai/code](https://claude.ai/code) |
 
 **Install AGY** (optional fallback): `curl -fsSL https://antigravity.google/cli/install.sh | bash`
@@ -237,7 +237,7 @@ Override via `--engine` flag or the `GEMINI_ENGINE` environment variable.
 
 > `--model` and `--effort` are managed by the **gemini** engine only. `--engine agy` currently leaves model choice to AGY's configured/default behavior; the plugin does not translate Gemini aliases or effort tiers to AGY arguments.
 
-> **AGY transcript recovery is platform-verified on Windows and macOS; Linux is reported working.** Because `agy --print` does not pipe its output (upstream [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466) — reproduced on macOS agy 1.0.7: 0 bytes reach stdout through a pipe), the plugin recovers AGY responses from the on-disk "brain" transcript under `~/.gemini/antigravity-cli/brain` (Windows 1.0.3 and macOS 1.0.7, both verified — same root) or `~/.antigravity-cli/brain` (Linux 1.0.2, reported). If `--engine agy` reports no brain root on your machine, run `agy` once so it creates the directory, or open an issue with its actual location.
+> **AGY transcript recovery is platform-verified on Windows and macOS; Linux is reported working.** Because `agy --print` does not pipe its output (upstream [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466) — reproduced on macOS agy 1.0.7: 0 bytes reach stdout through a pipe), the plugin recovers AGY responses from the on-disk "brain" transcript under `~/.gemini/antigravity-cli/brain` (Windows 1.0.3 and 1.1.0, macOS 1.0.7 — all verified, same root) or `~/.antigravity-cli/brain` (Linux 1.0.2, reported). If `--engine agy` reports no brain root on your machine, run `agy` once so it creates the directory, or open an issue with its actual location.
 
 ---
 
