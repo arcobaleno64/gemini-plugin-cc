@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- **F-CC1: hand-rolled stdio MCP server.** Added `gemini_rescue`, `gemini_review`, `gemini_job_status`, `gemini_job_result`, and `gemini_job_cancel` as thin JSON-RPC wrappers over the existing companion dispatch, job-control, and state paths. The plugin now declares the server through `.mcp.json`; MCP and CLI background dispatch share the same persisted request construction so prompt assembly cannot drift.
+
 ### Fixed
 - **`--engine agy --write` no longer silently writes to AGY's scratch dir instead of the target directory.** Machine-verified on AGY 1.1.0/Windows 2026-07-09: a fresh (non-continuation) `agy --print --dangerously-skip-permissions` write turn with no prior workspace/project association creates files under `~/.gemini/antigravity-cli/scratch/` rather than the spawned `cwd` — silently, with `status: 0` and no error, so a caller only notices by checking the file landed in the wrong place. `buildCliArgs` now appends `--new-project` on a write turn that is not a `--continue` resume, binding the session's workspace to `cwd`; a resumed conversation is left alone since it already has its original project association. New `tests/engine.test.mjs` coverage for the three `buildCliArgs("agy", ...)` flag-composition cases (write, resumed write, read-only). (`lib/engine.mjs`) Re-verified end-to-end post-commit on AGY 1.1.0/Windows 2026-07-10: a fresh `task --engine agy --write` turn completed in 13s (job `completed`, no `request-review` stall) with the probe file landing in `cwd`, not scratch.
 

@@ -63,6 +63,7 @@ import {
 import { MODEL_MAP_METADATA, MODEL_ALIAS_ENTRIES } from "./lib/model-map.mjs";
 
 const ROOT_DIR = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+const SELF_PATH = fileURLToPath(import.meta.url);
 const REVIEW_SCHEMA = path.join(ROOT_DIR, "schemas", "review-output.schema.json");
 const DEFAULT_STATUS_WAIT_TIMEOUT_MS = 240000;
 const DEFAULT_STATUS_POLL_INTERVAL_MS = 2000;
@@ -615,9 +616,9 @@ async function runForegroundCommand(job, runner, options = {}) {
   return execution;
 }
 
-function spawnDetachedWorker(cwd, jobId, workerCommand) {
+function spawnDetachedWorker(cwd, jobId, workerCommand, spawnFn = spawn) {
   const scriptPath = path.join(ROOT_DIR, "scripts", "gemini-companion.mjs");
-  const child = spawn(process.execPath, [scriptPath, workerCommand, "--cwd", cwd, "--job-id", jobId], {
+  const child = spawnFn(process.execPath, [scriptPath, workerCommand, "--cwd", cwd, "--job-id", jobId], {
     cwd,
     env: process.env,
     detached: true,
@@ -631,11 +632,11 @@ function spawnDetachedWorker(cwd, jobId, workerCommand) {
 // Persist a job and hand it to a detached worker (`task-worker` or
 // `review-worker`). Both job classes share the same enqueue/state machinery; the
 // worker subcommand only decides which executor deserializes the request.
-function enqueueBackgroundJob(cwd, job, request, workerCommand) {
+function enqueueBackgroundJob(cwd, job, request, workerCommand, { spawnFn = spawn } = {}) {
   const { logFile } = createTrackedProgress(job);
   appendLogLine(logFile, "Queued for background execution.");
 
-  const child = spawnDetachedWorker(cwd, job.id, workerCommand);
+  const child = spawnDetachedWorker(cwd, job.id, workerCommand, spawnFn);
   const queuedRecord = {
     ...job,
     status: "queued",
@@ -659,6 +660,62 @@ function enqueueBackgroundJob(cwd, job, request, workerCommand) {
   };
 }
 
+export function dispatchBackgroundReview(request, { spawnFn = spawn } = {}) {
+  const cwd = path.resolve(request.cwd ?? process.cwd());
+  const workspaceRoot = resolveWorkspaceRoot(cwd);
+  const reviewName = request.reviewName ?? "Review";
+  const templateName = request.templateName ?? "review";
+  ensureGitRepository(cwd);
+  const target = resolveReviewTarget(cwd, { base: request.base, scope: request.scope });
+  const kind = templateName === "adversarial-review" ? "adversarial-review" : "review";
+  const job = createCompanionJob({
+    prefix: "review",
+    kind,
+    title: `Gemini ${reviewName}`,
+    workspaceRoot,
+    jobClass: "review",
+    summary: `${reviewName} ${target.label}`
+  });
+  const storedRequest = buildReviewRequest({
+    cwd,
+    base: request.base,
+    scope: request.scope,
+    model: request.model,
+    engine: request.engine,
+    focusText: request.focusText ?? "",
+    reviewName,
+    templateName,
+    deep: request.deep
+  });
+  return enqueueBackgroundJob(cwd, job, storedRequest, "review-worker", { spawnFn }).payload;
+}
+
+export function dispatchBackgroundTask(request, { spawnFn = spawn } = {}) {
+  const cwd = path.resolve(request.cwd ?? process.cwd());
+  const workspaceRoot = resolveWorkspaceRoot(cwd);
+  const model = normalizeRequestedModel(request.model);
+  const effort = request.effort ?? null;
+  if (effort != null && !VALID_EFFORT_LEVELS.has(String(effort).trim().toLowerCase())) {
+    throw new Error(`Invalid --effort "${effort}". Valid values: ${[...VALID_EFFORT_LEVELS].join(", ")}.`);
+  }
+  const prompt = request.prompt ?? "";
+  const resumeLast = Boolean(request.resumeLast);
+  requireTaskRequest(prompt, resumeLast);
+  const taskMetadata = buildTaskRunMetadata({ prompt, resumeLast });
+  const job = buildTaskJob(workspaceRoot, taskMetadata, Boolean(request.write));
+  const storedRequest = buildTaskRequest({
+    cwd,
+    model,
+    effort,
+    engine: request.engine ?? null,
+    prompt,
+    write: Boolean(request.write),
+    resumeLast,
+    jobId: job.id
+  });
+  return enqueueBackgroundJob(cwd, job, storedRequest, "task-worker", { spawnFn }).payload;
+}
+
 async function handleReviewCommand(argv, { reviewName, templateName, supportsFocus }) {
   const { options, positionals } = parseCommandInput(argv, {
     valueOptions: ["base", "scope", "model", "engine", "cwd"],
@@ -669,6 +726,25 @@ async function handleReviewCommand(argv, { reviewName, templateName, supportsFoc
   const cwd = resolveCommandCwd(options);
   const workspaceRoot = resolveCommandWorkspace(options);
   const focusText = supportsFocus ? positionals.join(" ").trim() : "";
+
+  if (options.background) {
+    // Persist the review to a detached review-worker so the result survives an
+    // interrupted Claude session (parity with background tasks). Returns a job id
+    // immediately; track via /gemini:status and /gemini:result.
+    const payload = dispatchBackgroundReview({
+      cwd,
+      base: options.base,
+      scope: options.scope,
+      model: options.model,
+      engine: options.engine,
+      focusText,
+      reviewName,
+      templateName,
+      deep: options.deep
+    });
+    outputCommandResult(payload, renderQueuedTaskLaunch(payload), options.json);
+    return;
+  }
 
   ensureGitRepository(cwd);
   const target = resolveReviewTarget(cwd, { base: options.base, scope: options.scope });
@@ -681,26 +757,6 @@ async function handleReviewCommand(argv, { reviewName, templateName, supportsFoc
     jobClass: "review",
     summary: `${reviewName} ${target.label}`
   });
-
-  if (options.background) {
-    // Persist the review to a detached review-worker so the result survives an
-    // interrupted Claude session (parity with background tasks). Returns a job id
-    // immediately; track via /gemini:status and /gemini:result.
-    const request = buildReviewRequest({
-      cwd,
-      base: options.base,
-      scope: options.scope,
-      model: options.model,
-      engine: options.engine,
-      focusText,
-      reviewName,
-      templateName,
-      deep: options.deep
-    });
-    const { payload } = enqueueBackgroundJob(cwd, job, request, "review-worker");
-    outputCommandResult(payload, renderQueuedTaskLaunch(payload), options.json);
-    return;
-  }
 
   await runForegroundCommand(
     job,
@@ -755,20 +811,15 @@ async function handleTask(argv) {
   const taskMetadata = buildTaskRunMetadata({ prompt, resumeLast });
 
   if (options.background) {
-    requireTaskRequest(prompt, resumeLast);
-
-    const job = buildTaskJob(workspaceRoot, taskMetadata, write);
-    const request = buildTaskRequest({
+    const payload = dispatchBackgroundTask({
       cwd,
-      model,
+      model: options.model,
       effort: options.effort ?? null,
       engine,
       prompt,
       write,
-      resumeLast,
-      jobId: job.id
+      resumeLast
     });
-    const { payload } = enqueueBackgroundJob(cwd, job, request, "task-worker");
     outputCommandResult(payload, renderQueuedTaskLaunch(payload), options.json);
     return;
   }
@@ -874,6 +925,15 @@ async function handleStatus(argv) {
   outputResult(renderStatusPayload(report, options.json), options.json);
 }
 
+export function getJobStatus({ cwd = process.cwd(), jobId }) {
+  return buildSingleJobSnapshot(path.resolve(cwd), jobId);
+}
+
+export function getJobResult({ cwd = process.cwd(), jobId, all = false }) {
+  const { workspaceRoot, job } = resolveResultJob(path.resolve(cwd), jobId, { all });
+  return { job, storedJob: readStoredJob(workspaceRoot, job.id) };
+}
+
 function handleResult(argv) {
   const { options, positionals } = parseCommandInput(argv, {
     valueOptions: ["cwd"],
@@ -882,11 +942,9 @@ function handleResult(argv) {
 
   const cwd = resolveCommandCwd(options);
   const reference = positionals[0] ?? "";
-  const { workspaceRoot, job } = resolveResultJob(cwd, reference, { all: options.all });
-  const storedJob = readStoredJob(workspaceRoot, job.id);
-  const payload = { job, storedJob };
+  const payload = getJobResult({ cwd, jobId: reference, all: options.all });
 
-  outputCommandResult(payload, renderStoredJobResult(job, storedJob), options.json);
+  outputCommandResult(payload, renderStoredJobResult(payload.job, payload.storedJob), options.json);
 }
 
 async function handleTaskResumeCandidate(argv) {
@@ -927,13 +985,19 @@ async function handleCancel(argv) {
 
   const cwd = resolveCommandCwd(options);
   const reference = positionals[0] ?? "";
-  const { workspaceRoot, job } = resolveCancelableJob(cwd, reference, { all: options.all });
+  const { payload, job, termination } = cancelJob({ cwd, jobId: reference, all: options.all });
+
+  outputCommandResult(payload, renderCancelReport(job, termination), options.json);
+}
+
+export function cancelJob({ cwd = process.cwd(), jobId = "", all = false }, { terminateProcessTreeFn = terminateProcessTree } = {}) {
+  const { workspaceRoot, job } = resolveCancelableJob(path.resolve(cwd), jobId, { all });
   const existing = readStoredJob(workspaceRoot, job.id) ?? {};
 
   // Be honest about whether a live process was actually killed: the detached
   // worker is unref()-ed, so by cancel time its PID may already be gone. The job
   // is still marked cancelled (the user's intent is recorded) in every case.
-  const termination = terminateProcessTree(job.pid ?? Number.NaN);
+  const termination = terminateProcessTreeFn(job.pid ?? Number.NaN);
   appendLogLine(job.logFile, `Cancelled by user — ${describeTermination(termination)}.`);
 
   const completedAt = nowIso();
@@ -967,7 +1031,7 @@ async function handleCancel(argv) {
     processTerminated: termination.delivered
   };
 
-  outputCommandResult(payload, renderCancelReport(nextJob, termination), options.json);
+  return { payload, job: nextJob, termination };
 }
 
 async function main() {
@@ -1013,8 +1077,10 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`${message}\n`);
-  process.exitCode = 1;
-});
+if (process.argv[1] === SELF_PATH) {
+  main().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`${message}\n`);
+    process.exitCode = 1;
+  });
+}

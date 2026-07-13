@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "gemini": {
+      "command": "node",
+      "args": ["./scripts/gemini-mcp.mjs"],
+      "cwd": "."
+    }
+  }
+}
