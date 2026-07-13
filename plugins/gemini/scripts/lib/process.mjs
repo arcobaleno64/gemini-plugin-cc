@@ -2,17 +2,12 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 
-// Windows shell:true builds one cmd.exe command-line string by naively
-// concatenating argv with spaces (Node's own DEP0190 warning: "arguments
-// are not escaped, only concatenated") -- so an argv element (or the
-// binary itself) containing a space or a shell metacharacter must be
-// quoted here ourselves, or cmd.exe re-splits/misinterprets it before the
-// real binary ever sees it. NOT a complete cmd.exe escaper (misses %, !,
-// backtick, comma, semicolon and doesn't handle embedded quotes per cmd's
-// real two-phase parse) -- safe here because every argv element is a
-// short fixed constant, a resolved binary path, or a validated model id;
-// prompts travel via stdin for gemini and are length/NUL-validated before
-// reaching agy's positional argv.
+// This is not a reliable cmd.exe escaper: embedded quotes toggle cmd's parse
+// state, and backslashes escape quotes for MSVCRT children, not for cmd.exe.
+// Keep it only as a belt-and-suspenders safety net for the fixed-constant argv
+// used by remaining bare-name command paths (git/where/gemini/taskkill), never
+// as protection for free text. Gemini prompts use stdin; agy's free-text prompt
+// is protected by absolute-path resolution and therefore shell:false instead.
 const WINDOWS_SHELL_UNSAFE = /[\s|<>&()^"]/;
 function quoteForWindowsShell(arg) {
   if (typeof arg !== "string" || !WINDOWS_SHELL_UNSAFE.test(arg)) return arg;
@@ -76,20 +71,23 @@ export function binaryAvailable(command, versionArgs = ["--version"], options = 
   return { available: true, detail: result.stdout.trim() || result.stderr.trim() || "ok" };
 }
 
-export function resolveBinaryPath(command) {
+export function resolveBinaryPath(command, { requireExe = false } = {}) {
   if (path.isAbsolute(command)) {
-    return command;
+    return !requireExe || path.extname(command).toLowerCase() === ".exe" ? command : null;
   }
   const finder = process.platform === "win32" ? "where" : "which";
   const result = runCommand(finder, [command]);
   if (result.status !== 0) {
     return null;
   }
-  const first = result.stdout
+  const candidates = result.stdout
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter(Boolean)[0];
-  return first || null;
+    .filter((line) => line && path.isAbsolute(line));
+  const resolved = requireExe
+    ? candidates.find((candidate) => path.extname(candidate).toLowerCase() === ".exe")
+    : candidates[0];
+  return resolved ?? null;
 }
 
 function looksLikeMissingProcessMessage(text) {

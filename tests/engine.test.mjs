@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { MODEL_ALIASES, normalizeRequestedModel, mapEffortToModel, buildCliArgs } from "../plugins/gemini/scripts/lib/engine.mjs";
+import { MODEL_ALIASES, normalizeRequestedModel, mapEffortToModel, buildCliArgs, detectEngine } from "../plugins/gemini/scripts/lib/engine.mjs";
 
 // These two IDs return 404 ModelNotFound on the gemini CLI (verified 0.44.1).
 // No alias or effort tier may resolve to them.
@@ -44,6 +44,22 @@ test("unknown / explicit model strings pass through unchanged", () => {
   assert.equal(normalizeRequestedModel("some-custom-model"), "some-custom-model");
   assert.equal(normalizeRequestedModel(null), null);
   assert.equal(normalizeRequestedModel(""), null);
+});
+
+test("detectEngine fails closed when agy resolves only to a bare non-.exe path", () => {
+  assert.throws(
+    () => detectEngine("agy", { resolveBinaryPathImpl: () => "agy.cmd" }),
+    /AGY could not be resolved to an executable \.exe path; the plugin refuses to spawn it via the shell to avoid argv injection on Windows\./
+  );
+});
+
+test("detectEngine fails closed when agy resolves only to an absolute .cmd shim (CVE-2024-27980 angle)", () => {
+  // An absolute .cmd path would still re-enter cmd.exe on pre-patch Node even
+  // under shell:false, so requireExe must reject it, not just bare names.
+  assert.throws(
+    () => detectEngine("agy", { resolveBinaryPathImpl: () => (process.platform === "win32" ? "C:\\tools\\agy.cmd" : null) }),
+    /AGY could not be resolved to an executable \.exe path/
+  );
 });
 
 test("agy positional prompt rejects NUL bytes before argv construction", () => {

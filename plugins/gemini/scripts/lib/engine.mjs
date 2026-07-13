@@ -1,4 +1,5 @@
 import process from "node:process";
+import path from "node:path";
 
 import { createFailureError } from "./failures.mjs";
 import { binaryAvailable, resolveBinaryPath } from "./process.mjs";
@@ -7,6 +8,9 @@ import { resolveAgyBrainRoot } from "./agy-transcript.mjs";
 
 export const ENGINE_ENV = "GEMINI_ENGINE";
 export const AGY_POSITIONAL_PROMPT_SAFE_LIMIT = 24_000;
+
+const AGY_EXECUTABLE_PATH_ERROR =
+  "AGY could not be resolved to an executable .exe path; the plugin refuses to spawn it via the shell to avoid argv injection on Windows. Ensure agy is on PATH or use --engine gemini.";
 
 // Model aliases and effort tiers live in model-map.mjs (single source of truth,
 // verified against the README table). Re-exported here for existing importers.
@@ -40,7 +44,17 @@ export function normalizeRequestedModel(model) {
   return resolved;
 }
 
-export function detectEngine(requestedEngine = null) {
+function resolveAgyExecutablePath({ resolveBinaryPathImpl = resolveBinaryPath } = {}) {
+  const resolved = resolveBinaryPathImpl("agy", { requireExe: process.platform === "win32" });
+  const isAbsolute = typeof resolved === "string" && path.isAbsolute(resolved);
+  const isExecutable = process.platform !== "win32" || path.extname(resolved ?? "").toLowerCase() === ".exe";
+  if (!isAbsolute || !isExecutable) {
+    throw new Error(AGY_EXECUTABLE_PATH_ERROR);
+  }
+  return resolved;
+}
+
+export function detectEngine(requestedEngine = null, options = {}) {
   const envEngine = process.env[ENGINE_ENV];
   const target = requestedEngine ?? envEngine ?? "auto";
   const normalized = String(target).trim().toLowerCase();
@@ -50,7 +64,8 @@ export function detectEngine(requestedEngine = null) {
   }
 
   if (normalized === "agy") {
-    const status = binaryAvailable("agy", ["--version"]);
+    const binary = resolveAgyExecutablePath(options);
+    const status = binaryAvailable(binary, ["--version"]);
     if (!status.available) throw new Error("AGY engine requested but agy binary is not available.");
     // `agy --print` does not emit its response over a pipe in non-TTY use
     // (upstream bug google-gemini/gemini-cli#27466); the plugin recovers the
@@ -62,7 +77,7 @@ export function detectEngine(requestedEngine = null) {
         "AGY engine requested but `agy --print` cannot return output over a pipe (upstream bug google-gemini/gemini-cli#27466) and no transcript brain dir was found to recover from on this platform. Run `agy` once interactively to initialize it, or use `--engine gemini`."
       );
     }
-    return { engine: "agy", binary: resolveBinaryPath("agy") ?? "agy", version: status.detail ?? "unknown" };
+    return { engine: "agy", binary, version: status.detail ?? "unknown" };
   }
 
   if (normalized === "gemini") {
@@ -83,9 +98,10 @@ export function detectEngine(requestedEngine = null) {
     return { engine: "gemini", binary: "gemini", version: geminiStatus.detail ?? "unknown" };
   }
 
-  const agyStatus = binaryAvailable("agy", ["--version"]);
+  const agyBinary = resolveAgyExecutablePath(options);
+  const agyStatus = binaryAvailable(agyBinary, ["--version"]);
   if (agyStatus.available) {
-    return { engine: "agy", binary: resolveBinaryPath("agy") ?? "agy", version: agyStatus.detail ?? "unknown" };
+    return { engine: "agy", binary: agyBinary, version: agyStatus.detail ?? "unknown" };
   }
 
   throw new Error("No Gemini or AGY engine found. Install agy or gemini CLI and retry.");
