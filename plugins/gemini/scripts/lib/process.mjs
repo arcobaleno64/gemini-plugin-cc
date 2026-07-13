@@ -2,8 +2,28 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 
+// Windows shell:true builds one cmd.exe command-line string by naively
+// concatenating argv with spaces (Node's own DEP0190 warning: "arguments
+// are not escaped, only concatenated") -- so an argv element (or the
+// binary itself) containing a space or a shell metacharacter must be
+// quoted here ourselves, or cmd.exe re-splits/misinterprets it before the
+// real binary ever sees it. NOT a complete cmd.exe escaper (misses %, !,
+// backtick, comma, semicolon and doesn't handle embedded quotes per cmd's
+// real two-phase parse) -- safe here because every argv element is a
+// short fixed constant, a resolved binary path, or a validated model id;
+// prompts travel via stdin for gemini and are length/NUL-validated before
+// reaching agy's positional argv.
+const WINDOWS_SHELL_UNSAFE = /[\s|<>&()^"]/;
+function quoteForWindowsShell(arg) {
+  if (typeof arg !== "string" || !WINDOWS_SHELL_UNSAFE.test(arg)) return arg;
+  return `"${arg.replace(/"/g, '\\"')}"`;
+}
+
 export function runCommand(command, args = [], options = {}) {
-  const result = spawnSync(command, args, {
+  const shell = options.shell ?? (process.platform === "win32" && !path.isAbsolute(command));
+  const safeCommand = shell ? quoteForWindowsShell(command) : command;
+  const safeArgs = shell ? args.map(quoteForWindowsShell) : args;
+  const result = spawnSync(safeCommand, safeArgs, {
     cwd: options.cwd,
     env: options.env,
     encoding: "utf8",
@@ -12,7 +32,7 @@ export function runCommand(command, args = [], options = {}) {
     // Absolute paths are spawned directly (shell:false) so arguments are passed
     // literally and never re-parsed by the shell. Bare command names still use the
     // shell on Windows to resolve .cmd/.ps1 wrappers (npm global bins).
-    shell: options.shell ?? (process.platform === "win32" && !path.isAbsolute(command)),
+    shell,
     windowsHide: true,
     ...(options.maxBuffer != null && { maxBuffer: options.maxBuffer }),
     ...(options.timeout != null && { timeout: options.timeout }),
