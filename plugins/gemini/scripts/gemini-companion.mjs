@@ -26,7 +26,7 @@ import {
   filterJobsForCurrentSession,
   readStoredJob,
   resolveCancelableJob,
-  resolveResultJob,
+  resolveResultJobs,
   sortJobsNewestFirst
 } from "./lib/job-control.mjs";
 import {
@@ -44,9 +44,11 @@ import {
   renderReviewResult,
   renderTaskResult,
   renderStoredJobResult,
+  renderStoredJobGroupResult,
   renderCancelReport,
   describeTermination,
   renderJobStatusReport,
+  renderJobGroupStatusReport,
   renderSetupReport,
   renderStatusReport
 } from "./lib/render.mjs";
@@ -89,7 +91,7 @@ function printUsage() {
     [
       "Usage:",
       "  node scripts/gemini-companion.mjs setup [--json] [--enable-review-gate|--disable-review-gate]",
-      "  node scripts/gemini-companion.mjs adversarial-review [--wait|--background] [--deep] [--base <ref>] [--scope <auto|working-tree|branch>] [--engine agy|gemini|auto] [focus text]",
+      "  node scripts/gemini-companion.mjs adversarial-review [--wait|--background] [--deep] [--base <ref>] [--scope <auto|working-tree|branch>] [--engine agy|gemini|auto] [--engines gemini,agy] [focus text]",
       "  node scripts/gemini-companion.mjs review [--wait|--background] [--deep] [--base <ref>] [--scope <auto|working-tree|branch>] [--engine agy|gemini|auto]",
       "  node scripts/gemini-companion.mjs task [--background] [--write] [--resume-last|--resume|--fresh] [--model <model>] [--effort <low|medium|high>] [--engine agy|gemini|auto] [prompt]",
       "  node scripts/gemini-companion.mjs status [job-id] [--all] [--json]",
@@ -312,20 +314,24 @@ function isActiveJobStatus(status) {
   return status === "queued" || status === "running";
 }
 
+function isActiveJobSnapshot(snapshot) {
+  return (snapshot.jobs ?? [snapshot.job]).some((job) => isActiveJobStatus(job.status));
+}
+
 async function waitForSingleJobSnapshot(cwd, reference, options = {}) {
   const timeoutMs = Math.max(0, Number(options.timeoutMs) || DEFAULT_STATUS_WAIT_TIMEOUT_MS);
   const pollIntervalMs = Math.max(100, Number(options.pollIntervalMs) || DEFAULT_STATUS_POLL_INTERVAL_MS);
   const deadline = Date.now() + timeoutMs;
   let snapshot = buildSingleJobSnapshot(cwd, reference);
 
-  while (isActiveJobStatus(snapshot.job.status) && Date.now() < deadline) {
+  while (isActiveJobSnapshot(snapshot) && Date.now() < deadline) {
     await sleep(Math.min(pollIntervalMs, Math.max(0, deadline - Date.now())));
     snapshot = buildSingleJobSnapshot(cwd, reference);
   }
 
   return {
     ...snapshot,
-    waitTimedOut: isActiveJobStatus(snapshot.job.status),
+    waitTimedOut: isActiveJobSnapshot(snapshot),
     timeoutMs
   };
 }
@@ -350,8 +356,7 @@ async function resolveLatestTrackedTaskThread(cwd, options = {}) {
   return null;
 }
 
-async function executeReviewRun(request) {
-  const reviewName = request.reviewName ?? "Adversarial Review";
+export function buildReviewPrompt(request) {
   const templateName = request.templateName ?? "adversarial-review";
   // Resolve the review target from the caller's --base/--scope so the user's
   // selection actually reaches the diff collection. (Re-resolving with empty
@@ -361,6 +366,24 @@ async function executeReviewRun(request) {
     scope: request.scope
   });
   const context = collectReviewContext(request.cwd, target);
+  if (context.isEmpty) return { context, prompt: null };
+
+  const template = loadPromptTemplate(ROOT_DIR, templateName);
+  const basePrompt = interpolateTemplate(template, {
+    TARGET_LABEL: context.target.label,
+    USER_FOCUS: request.focusText || "No extra focus provided.",
+    REVIEW_INPUT: context.content
+  });
+  return {
+    context,
+    prompt: request.deep ? `${basePrompt}\n${DEEP_REVIEW_GUIDANCE}` : basePrompt
+  };
+}
+
+async function executeReviewRun(request) {
+  const reviewName = request.reviewName ?? "Adversarial Review";
+  const templateName = request.templateName ?? "adversarial-review";
+  const { context, prompt } = request.preparedReview ?? buildReviewPrompt(request);
 
   // Nothing-to-review guard: if the resolved target has no changes, short-circuit
   // instead of asking Gemini to review an empty diff (which it rubber-stamps as
@@ -390,15 +413,6 @@ async function executeReviewRun(request) {
     };
   }
 
-  const template = loadPromptTemplate(ROOT_DIR, templateName);
-  const basePrompt = interpolateTemplate(template, {
-    TARGET_LABEL: context.target.label,
-    USER_FOCUS: request.focusText || "No extra focus provided.",
-    REVIEW_INPUT: context.content
-  });
-  // --deep: invite agentic repo exploration beyond the diff (read-only). Default
-  // stays the fast, diff-scoped single-shot review (zero behavior change).
-  const prompt = request.deep ? `${basePrompt}\n${DEEP_REVIEW_GUIDANCE}` : basePrompt;
   const result = await runGeminiReviewResilient(request.cwd, {
     prompt,
     model: request.model,
@@ -520,7 +534,7 @@ function getJobKindLabel(kind, jobClass) {
   return jobClass === "review" ? "review" : "rescue";
 }
 
-function createCompanionJob({ prefix, kind, title, workspaceRoot, jobClass, summary, write = false }) {
+function createCompanionJob({ prefix, kind, title, workspaceRoot, jobClass, summary, write = false, engine = null, groupId = null }) {
   return createJobRecord({
     id: generateJobId(prefix),
     kind,
@@ -529,7 +543,9 @@ function createCompanionJob({ prefix, kind, title, workspaceRoot, jobClass, summ
     workspaceRoot,
     jobClass,
     summary,
-    write
+    write,
+    ...(engine ? { engine } : {}),
+    ...(groupId ? { groupId } : {})
   });
 }
 
@@ -570,11 +586,11 @@ function buildTaskRequest({ cwd, model, effort, engine, prompt, write, resumeLas
   };
 }
 
-// Serializable review request for the detached review-worker. The diff target is
-// NOT stored — the worker re-resolves it from base/scope at run time (the same
-// re-resolution executeReviewRun already does), so the review reflects the tree
-// when the worker runs, mirroring how a background task bakes in its prompt.
-function buildReviewRequest({ cwd, base, scope, model, engine, focusText, reviewName, templateName, deep = false }) {
+// Serializable review request for the detached review-worker. A normal single
+// review re-resolves base/scope when the worker runs. A grouped blind review may
+// supply one preparedReview snapshot so every engine receives byte-identical
+// input even if the working tree changes between worker starts.
+function buildReviewRequest({ cwd, base, scope, model, engine, focusText, reviewName, templateName, deep = false, preparedReview = null }) {
   return {
     cwd,
     base,
@@ -584,7 +600,8 @@ function buildReviewRequest({ cwd, base, scope, model, engine, focusText, review
     focusText,
     reviewName,
     templateName,
-    deep
+    deep,
+    ...(preparedReview ? { preparedReview } : {})
   };
 }
 
@@ -654,7 +671,9 @@ function enqueueBackgroundJob(cwd, job, request, workerCommand, { spawnFn = spaw
       status: "queued",
       title: job.title,
       summary: job.summary,
-      logFile
+      logFile,
+      ...(job.engine ? { engine: job.engine } : {}),
+      ...(job.groupId ? { groupId: job.groupId } : {})
     },
     logFile
   };
@@ -674,7 +693,9 @@ export function dispatchBackgroundReview(request, { spawnFn = spawn } = {}) {
     title: `Gemini ${reviewName}`,
     workspaceRoot,
     jobClass: "review",
-    summary: `${reviewName} ${target.label}`
+    summary: `${reviewName} ${target.label}`,
+    engine: request.engine,
+    groupId: request.groupId
   });
   const storedRequest = buildReviewRequest({
     cwd,
@@ -685,9 +706,70 @@ export function dispatchBackgroundReview(request, { spawnFn = spawn } = {}) {
     focusText: request.focusText ?? "",
     reviewName,
     templateName,
-    deep: request.deep
+    deep: request.deep,
+    preparedReview: request.preparedReview
   });
   return enqueueBackgroundJob(cwd, job, storedRequest, "review-worker", { spawnFn }).payload;
+}
+
+export function dispatchAdversarialReview(request, {
+  spawnFn = spawn,
+  detectEngineFn = detectEngine,
+  stderr = process.stderr
+} = {}) {
+  const engineValues = Array.isArray(request.engines) ? request.engines : String(request.engines ?? "").split(",");
+  const requestedEngines = [...new Set(engineValues.map((engine) => String(engine).trim().toLowerCase()).filter(Boolean))];
+  if (requestedEngines.length === 0) throw new Error("--engines requires at least one engine.");
+  const invalid = requestedEngines.filter((engine) => engine !== "gemini" && engine !== "agy");
+  if (invalid.length > 0) throw new Error(`Unknown review engine: ${invalid.join(", ")}. Valid engines: gemini, agy.`);
+
+  const available = [];
+  const unavailable = [];
+  for (const engine of requestedEngines) {
+    try {
+      detectEngineFn(engine);
+      available.push(engine);
+    } catch (error) {
+      unavailable.push({ engine, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  if (available.length === 0) {
+    throw new Error(`None of the requested review engines are available: ${unavailable.map(({ engine, error }) => `${engine} (${error})`).join("; ")}.`);
+  }
+
+  const warning = unavailable.length > 0
+    ? `Adversarial review degraded to ${available.join(", ")}; unavailable: ${unavailable.map(({ engine }) => engine).join(", ")}.`
+    : null;
+  if (warning) stderr.write(`${warning}\n`);
+
+  const groupId = available.length > 1 ? generateJobId("review-group") : null;
+  const preparedReview = groupId ? buildReviewPrompt({
+    ...request,
+    cwd: path.resolve(request.cwd ?? process.cwd()),
+    reviewName: "Adversarial Review",
+    templateName: "adversarial-review"
+  }) : null;
+  const jobs = available.map((engine) => dispatchBackgroundReview({
+    ...request,
+    engine,
+    groupId,
+    preparedReview,
+    reviewName: "Adversarial Review",
+    templateName: "adversarial-review"
+  }, { spawnFn }));
+  return {
+    groupId,
+    jobIds: jobs.map((job) => job.jobId),
+    jobs,
+    engines: available,
+    unavailableEngines: unavailable.map(({ engine }) => engine),
+    degraded: unavailable.length > 0,
+    warning
+  };
+}
+
+function renderQueuedReviewGroupLaunch(payload) {
+  return `Gemini adversarial review group ${payload.groupId} started in the background (${payload.engines.join(", ")}). Check /gemini:status ${payload.groupId} for progress.\n`;
 }
 
 export function dispatchBackgroundTask(request, { spawnFn = spawn } = {}) {
@@ -716,9 +798,9 @@ export function dispatchBackgroundTask(request, { spawnFn = spawn } = {}) {
   return enqueueBackgroundJob(cwd, job, storedRequest, "task-worker", { spawnFn }).payload;
 }
 
-async function handleReviewCommand(argv, { reviewName, templateName, supportsFocus }) {
+async function handleReviewCommand(argv, { reviewName, templateName, supportsFocus, supportsEngines = false }) {
   const { options, positionals } = parseCommandInput(argv, {
-    valueOptions: ["base", "scope", "model", "engine", "cwd"],
+    valueOptions: ["base", "scope", "model", "engine", "cwd", ...(supportsEngines ? ["engines"] : [])],
     booleanOptions: ["json", "wait", "background", "deep"],
     aliasMap: { m: "model" }
   });
@@ -726,6 +808,33 @@ async function handleReviewCommand(argv, { reviewName, templateName, supportsFoc
   const cwd = resolveCommandCwd(options);
   const workspaceRoot = resolveCommandWorkspace(options);
   const focusText = supportsFocus ? positionals.join(" ").trim() : "";
+
+  if (supportsEngines && options.engines != null) {
+    if (options.engine != null) throw new Error("Choose either --engine or --engines, not both.");
+    if (options.wait) throw new Error("--engines dispatches background jobs and cannot be combined with --wait.");
+    const dispatch = dispatchAdversarialReview({
+      cwd,
+      base: options.base,
+      scope: options.scope,
+      model: options.model,
+      engines: String(options.engines).split(","),
+      focusText,
+      deep: options.deep
+    });
+    if (dispatch.groupId) {
+      const payload = {
+        groupId: dispatch.groupId,
+        jobIds: dispatch.jobIds,
+        status: "queued",
+        engines: dispatch.engines
+      };
+      outputCommandResult(payload, renderQueuedReviewGroupLaunch(payload), options.json);
+    } else {
+      const payload = dispatch.jobs[0];
+      outputCommandResult(payload, renderQueuedTaskLaunch(payload), options.json);
+    }
+    return;
+  }
 
   if (options.background) {
     // Persist the review to a detached review-worker so the result survives an
@@ -783,7 +892,12 @@ async function handleReview(argv) {
 }
 
 async function handleAdversarialReview(argv) {
-  return handleReviewCommand(argv, { reviewName: "Adversarial Review", templateName: "adversarial-review", supportsFocus: true });
+  return handleReviewCommand(argv, {
+    reviewName: "Adversarial Review",
+    templateName: "adversarial-review",
+    supportsFocus: true,
+    supportsEngines: true
+  });
 }
 
 async function handleTask(argv) {
@@ -913,7 +1027,11 @@ async function handleStatus(argv) {
           pollIntervalMs: options["poll-interval-ms"]
         })
       : buildSingleJobSnapshot(cwd, reference);
-    outputCommandResult(snapshot, renderJobStatusReport(snapshot.job), options.json);
+    outputCommandResult(
+      snapshot,
+      snapshot.groupId ? renderJobGroupStatusReport(snapshot) : renderJobStatusReport(snapshot.job),
+      options.json
+    );
     return;
   }
 
@@ -930,8 +1048,14 @@ export function getJobStatus({ cwd = process.cwd(), jobId }) {
 }
 
 export function getJobResult({ cwd = process.cwd(), jobId, all = false }) {
-  const { workspaceRoot, job } = resolveResultJob(path.resolve(cwd), jobId, { all });
-  return { job, storedJob: readStoredJob(workspaceRoot, job.id) };
+  const resolved = resolveResultJobs(path.resolve(cwd), jobId, { all });
+  if (resolved.groupId) {
+    return {
+      groupId: resolved.groupId,
+      results: resolved.jobs.map((job) => ({ job, storedJob: readStoredJob(resolved.workspaceRoot, job.id) }))
+    };
+  }
+  return { job: resolved.job, storedJob: readStoredJob(resolved.workspaceRoot, resolved.job.id) };
 }
 
 function handleResult(argv) {
@@ -944,7 +1068,11 @@ function handleResult(argv) {
   const reference = positionals[0] ?? "";
   const payload = getJobResult({ cwd, jobId: reference, all: options.all });
 
-  outputCommandResult(payload, renderStoredJobResult(payload.job, payload.storedJob), options.json);
+  outputCommandResult(
+    payload,
+    payload.groupId ? renderStoredJobGroupResult(payload) : renderStoredJobResult(payload.job, payload.storedJob),
+    options.json
+  );
 }
 
 async function handleTaskResumeCandidate(argv) {

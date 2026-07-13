@@ -1,6 +1,6 @@
 ---
 description: Run an adversarial Gemini code review that challenges the implementation approach and design choices
-argument-hint: '[--wait|--background] [--deep] [--base <ref>] [--scope auto|working-tree|branch] [--engine <agy|gemini>] [--model <flash|pro>] [focus ...]'
+argument-hint: '[--wait|--background] [--deep] [--base <ref>] [--scope auto|working-tree|branch] [--engine <agy|gemini> | --engines gemini,agy] [--model <flash|pro>] [focus ...]'
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep, Bash(node:*), Bash(git:*), AskUserQuestion
 ---
@@ -19,6 +19,7 @@ Core constraint:
 - Keep the framing focused on whether the current approach is the right one, what assumptions it depends on, and where the design could fail under real-world conditions.
 
 Execution mode rules:
+- If the raw arguments include `--engines`, do not ask. Run the companion in the foreground with those arguments; the runtime queues the grouped jobs in the background and returns the group ID immediately.
 - If the raw arguments include `--wait`, do not ask. Run in the foreground.
 - If the raw arguments include `--background`, do not ask. Run in a Claude background task.
 - Otherwise, estimate the review size before asking:
@@ -41,6 +42,8 @@ Argument handling:
 - The companion script handles `--background` itself: it enqueues the review and spawns a detached `review-worker`, so the result persists even if this session ends. Do not use Claude's `run_in_background: true` for it.
 - `/gemini:adversarial-review` uses the same review target selection as `/gemini:review` (including `--base <ref>` and `--scope`).
 - Unlike `/gemini:review`, it can take extra focus text after the flags.
+- `--engines gemini,agy` queues the same blind prompt on both available engines as a background group. The jobs share a group ID but do not receive each other's identity or output. Do not combine `--engines` with `--engine` or `--wait`.
+- If one requested engine is unavailable, the runtime prints a degradation warning to stderr and queues the remaining engine as a normal single job. If neither is available, it fails without creating a job.
 - `--deep` runs an **agentic** review: Gemini uses its read-only tools to inspect repo context beyond the diff (dependency manifests, untracked files, callers) before producing the same JSON findings. Slower and higher-token; omit it for the fast, diff-scoped default. Pair `--deep` with `--background` for larger changes.
 
 Foreground flow:
@@ -61,3 +64,4 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" adversarial-review --b
 - This enqueues the review, spawns a detached `review-worker`, and returns a job id right away. The result persists even if this Claude session is interrupted.
 - Do not use `run_in_background: true` and do not call `BashOutput` — the companion already detached; this call returns immediately.
 - Relay the returned job id: "Gemini adversarial review started in the background as `<job-id>`. Check `/gemini:status <job-id>` for progress and `/gemini:result <job-id>` when it finishes."
+- For `--engines`, relay the returned group ID instead: "Gemini adversarial review group started as `<group-id>`. Check `/gemini:status <group-id>` for both engines and `/gemini:result <group-id>` for their verdicts."

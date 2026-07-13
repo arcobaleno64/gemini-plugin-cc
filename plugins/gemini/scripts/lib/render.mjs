@@ -407,6 +407,24 @@ export function renderJobStatusReport(job) {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
+export function renderJobGroupStatusReport({ groupId, jobs = [] }) {
+  const lines = [
+    "# Gemini Adversarial Review Group Status",
+    "",
+    `Group: ${groupId}`,
+    "",
+    "| Engine | Job | Status | Phase | Elapsed / Duration |",
+    "| --- | --- | --- | --- | --- |"
+  ];
+  for (const job of jobs) {
+    lines.push(
+      `| ${escapeMarkdownCell(job.engine ?? "unknown")} | ${escapeMarkdownCell(job.id)} | ${escapeMarkdownCell(job.status)} | ${escapeMarkdownCell(job.phase ?? "")} | ${escapeMarkdownCell(job.elapsed ?? job.duration ?? "")} |`
+    );
+  }
+  lines.push("", `Result: /gemini:result ${groupId}`);
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
 export function renderStoredJobResult(job, storedJob) {
   const threadId = storedJob?.threadId ?? job.threadId ?? null;
   const engine = storedJob?.engine ?? job?.engine ?? null;
@@ -472,6 +490,30 @@ export function renderStoredJobResult(job, storedJob) {
     lines.push("", "No captured result payload was stored for this job.");
   }
 
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
+export function renderStoredJobGroupResult({ groupId, results = [] }) {
+  const lines = [
+    "# Gemini Adversarial Review Group Result",
+    "",
+    `Group: ${groupId}`,
+    "",
+    "| Engine | Job | Status | Verdict | Summary |",
+    "| --- | --- | --- | --- | --- |"
+  ];
+
+  for (const { job, storedJob } of results) {
+    const review = storedJob?.result?.result;
+    lines.push(
+      `| ${escapeMarkdownCell(storedJob?.engine ?? job.engine ?? "unknown")} | ${escapeMarkdownCell(job.id)} | ${escapeMarkdownCell(job.status)} | ${escapeMarkdownCell(review?.verdict ?? "unavailable")} | ${escapeMarkdownCell(review?.summary ?? job.summary ?? "")} |`
+    );
+  }
+
+  for (const { job, storedJob } of results) {
+    const engine = String(storedJob?.engine ?? job.engine ?? "unknown").toUpperCase();
+    lines.push("", `## ${engine} — ${job.id}`, "", renderStoredJobResult(job, storedJob).trimEnd());
+  }
   return `${lines.join("\n").trimEnd()}\n`;
 }
 

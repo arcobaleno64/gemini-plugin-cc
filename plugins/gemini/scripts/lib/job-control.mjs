@@ -373,14 +373,20 @@ export function buildStatusSnapshot(cwd, options = {}) {
 export function buildSingleJobSnapshot(cwd, reference, options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const jobs = sortJobsNewestFirst(reconcileActiveJobs(workspaceRoot, listJobs(workspaceRoot), options));
-  const selected = matchJobReference(jobs, reference);
+  const exactGroup = reference ? jobs.filter((job) => job.groupId === reference) : [];
+  const selected = exactGroup[0] ?? matchJobReference(jobs, reference);
   if (!selected) {
     throw new Error(`No job found for "${reference}". Run /gemini:status to inspect known jobs.`);
   }
 
+  const grouped = selected.groupId
+    ? jobs.filter((job) => job.groupId === selected.groupId).map((job) => enrichJob(job, { maxProgressLines: options.maxProgressLines }))
+    : [];
+
   return {
     workspaceRoot,
-    job: enrichJob(selected, { maxProgressLines: options.maxProgressLines })
+    job: enrichJob(selected, { maxProgressLines: options.maxProgressLines }),
+    ...(selected.groupId ? { groupId: selected.groupId, jobs: grouped } : {})
   };
 }
 
@@ -411,6 +417,25 @@ export function resolveResultJob(cwd, reference, options = {}) {
   }
 
   throw new Error("No finished Gemini jobs found for this repository yet.");
+}
+
+export function resolveResultJobs(cwd, reference, options = {}) {
+  const workspaceRoot = resolveWorkspaceRoot(cwd);
+  const candidates = options.all ? listJobs(workspaceRoot) : filterJobsForCurrentSession(listJobs(workspaceRoot));
+  const jobs = sortJobsNewestFirst(candidates);
+  const exactGroup = reference ? jobs.filter((job) => job.groupId === reference) : [];
+  const selected = exactGroup[0] ?? resolveResultJob(cwd, reference, options).job;
+
+  if (!selected.groupId) {
+    return { workspaceRoot, job: selected };
+  }
+
+  const grouped = jobs.filter((job) => job.groupId === selected.groupId);
+  const active = grouped.find((job) => isActiveStatus(job.status));
+  if (active) {
+    throw new Error(`Review group ${selected.groupId} is still running (${active.id}: ${active.status}). Check /gemini:status and try again once it finishes.`);
+  }
+  return { workspaceRoot, groupId: selected.groupId, jobs: grouped };
 }
 
 export function resolveCancelableJob(cwd, reference, options = {}) {
