@@ -4,6 +4,7 @@ import path from "node:path";
 import process from "node:process";
 
 import { buildCliArgs, detectEngine, mapEffortToModel, normalizeRequestedModel } from "./engine.mjs";
+import { classifyCliFailure } from "./failures.mjs";
 import { binaryAvailable, runCommand } from "./process.mjs";
 import { resolveAgyBrainRoot, listConvDirs, recoverAgyResponse } from "./agy-transcript.mjs";
 
@@ -23,8 +24,8 @@ const GA_FALLBACK_MODEL = "gemini-2.5-flash";
 // back instead of hard-failing. The CLI surfaces this as `ModelNotFoundError` /
 // `code: 404` on stderr and, with --output-format json, an envelope carrying
 // `{ error: { message: "Requested entity was not found." } }` instead of
-// `response`. Preview/retired ids and CLI-version skew (e.g. gemini-3.5-flash is
-// not served by CLI 0.44.1) are the common triggers. Scoped narrowly to
+// `response`. Preview/retired ids and CLI-version skew are the common triggers.
+// Scoped narrowly to
 // model-not-found so auth/quota errors are NOT silently retried.
 function isModelNotFoundError(rawStdout, rawStderr, parsedEnvelope = null) {
   const text = `${rawStdout ?? ""}\n${rawStderr ?? ""}`;
@@ -134,11 +135,11 @@ export async function runGeminiTurn(cwd, options = {}) {
   const engineInfo = detectEngine(requestedEngine ?? null);
 
   if (engineInfo.engine === "agy") {
-    // `agy --print` is hardcoded to Gemini 3.5 Flash (High) and exposes no
-    // --model/--effort flag (env / settings.json cannot override it), so both are
-    // ignored here. Other/higher tiers are only reachable via the gemini engine.
+    // AGY versions have their own model surface, but Gemini aliases / effort
+    // tiers are gemini-engine concepts. Until this plugin has an explicit AGY
+    // mapping contract, leave model choice to AGY's configured/default behavior.
     if (model || effort) {
-      process.stderr.write(`[gemini-companion] Note: AGY's --print is locked to Gemini 3.5 Flash (High) and has no model/effort flag; ignoring --model/--effort. Use --engine gemini for other models.\n`);
+      process.stderr.write(`[gemini-companion] Note: --engine agy currently uses AGY's configured/default model; this plugin does not translate --model/--effort to AGY arguments. Use --engine gemini for plugin-managed model selection.\n`);
     }
     model = null;
   } else {
@@ -217,6 +218,7 @@ export async function runGeminiTurn(cwd, options = {}) {
   let finalMessage = rawStdout.trim();
   let threadId = null;
   let reasoningSummary = extractReasoningSummary(rawStderr) ?? null;
+  let recoveryFailure = null;
 
   if (engineInfo.engine === "agy") {
     // agy wrote the response to its transcript, not stdout (#27466). Recover it
@@ -227,6 +229,7 @@ export async function runGeminiTurn(cwd, options = {}) {
         `AGY produced no recoverable response (${rec.reason}). agy --print does not pipe output (google-gemini/gemini-cli#27466); transcript recovery failed.`
       );
     }
+    recoveryFailure = rec.failure ?? null;
     if (!rec.confident) {
       process.stderr.write(`[gemini-companion] Warning: AGY transcript match is not certain (${rec.reason}). Verify the response corresponds to this run.\n`);
     }
@@ -247,7 +250,22 @@ export async function runGeminiTurn(cwd, options = {}) {
     }
   }
 
+  if (!finalMessage && exitCode === 0) {
+    exitCode = 1;
+  }
+
   const touchedFiles = extractTouchedFiles(finalMessage);
+  const failure = recoveryFailure ?? (exitCode !== 0 || !finalMessage
+    ? classifyCliFailure({
+        engine: engineInfo.engine,
+        status: exitCode,
+        signal: result.signal,
+        error: result.error,
+        stdout: finalMessage || rawStdout,
+        stderr: rawStderr,
+        noOutput: !finalMessage
+      })
+    : null);
 
   onProgress?.({ message: exitCode === 0 ? "Turn completed." : "Turn failed.", phase: exitCode === 0 ? "done" : "failed" });
 
@@ -260,6 +278,7 @@ export async function runGeminiTurn(cwd, options = {}) {
     engine: engineInfo.engine,
     stderr: rawStderr,
     modelFallback: modelFallbackNote,
+    ...(failure ? { failure } : {})
   };
 }
 
@@ -323,9 +342,9 @@ export async function runGeminiReview(cwd, options = {}) {
   let modelFallbackNote = null;
 
   // Graceful degradation (gemini engine): if the requested model id is not found
-  // (preview/retired, or absent on this CLI version — e.g. gemini-3.5-flash on
-  // 0.44.1), retry ONCE on the GA fallback so the user still gets a review
-  // instead of a hard failure — and surface the substitution loudly.
+  // (preview/retired, or absent on this CLI version), retry ONCE on the GA
+  // fallback so the user still gets a review instead of a hard failure — and
+  // surface the substitution loudly.
   if (engineInfo.engine === "gemini" && model && model !== GA_FALLBACK_MODEL && isModelNotFoundError(rawStdout, rawStderr, tryParseJsonFromText(rawStdout))) {
     process.stderr.write(`[gemini-companion] Model '${model}' is unavailable on this gemini CLI (model-not-found); retrying review on GA fallback '${GA_FALLBACK_MODEL}'.\n`);
     const fbArgs = buildCliArgs("gemini", {
@@ -348,6 +367,7 @@ export async function runGeminiReview(cwd, options = {}) {
 
   let reviewJson = null;
   let reviewText = rawStdout.trim();
+  let recoveryFailure = null;
 
   if (engineInfo.engine === "agy") {
     // agy wrote the review to its transcript, not stdout (#27466). Recover it and
@@ -358,6 +378,7 @@ export async function runGeminiReview(cwd, options = {}) {
         `AGY produced no recoverable review (${rec.reason}). agy --print does not pipe output (google-gemini/gemini-cli#27466); transcript recovery failed.`
       );
     }
+    recoveryFailure = rec.failure ?? null;
     if (!rec.confident) {
       process.stderr.write(`[gemini-companion] Warning: AGY transcript match is not certain (${rec.reason}). Verify the review corresponds to this run.\n`);
     }
@@ -389,6 +410,23 @@ export async function runGeminiReview(cwd, options = {}) {
     reviewJson = tryParseJsonFromText(rawStdout);
   }
 
+  if (!reviewText && exitCode === 0) {
+    exitCode = 1;
+  }
+
+  const failure = recoveryFailure ?? (exitCode !== 0 || !reviewText || !reviewJson
+    ? classifyCliFailure({
+        engine: engineInfo.engine,
+        status: exitCode,
+        signal: result.signal,
+        error: result.error,
+        stdout: reviewText || rawStdout,
+        stderr: rawStderr,
+        noOutput: !reviewText,
+        invalidJson: Boolean(reviewText && !reviewJson)
+      })
+    : null);
+
   onProgress?.({ message: exitCode === 0 ? "Review completed." : "Review failed.", phase: exitCode === 0 ? "done" : "failed" });
 
   return {
@@ -399,6 +437,7 @@ export async function runGeminiReview(cwd, options = {}) {
     engine: engineInfo.engine,
     stderr: rawStderr,
     modelFallback: modelFallbackNote,
+    ...(failure ? { failure } : {})
   };
 }
 

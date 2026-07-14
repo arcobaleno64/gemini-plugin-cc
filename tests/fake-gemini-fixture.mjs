@@ -126,8 +126,13 @@ export function buildEnv(binDir) {
 // directory; pair with installUnavailableEngines for "not ready" assertions.
 export function buildEnvUnavailable(binDir) {
   const sep = process.platform === "win32" ? ";" : ":";
+  const env = { ...process.env };
+  // Must resolve to "auto" regardless of the calling shell's own engine
+  // preference (e.g. a developer's GEMINI_ENGINE=agy), so delete it rather
+  // than inherit it.
+  delete env.GEMINI_ENGINE;
   return {
-    ...process.env,
+    ...env,
     PATH: `${binDir}${sep}${process.env.PATH}`,
     GEMINI_HOME: path.join(binDir, "gemini-home")
   };

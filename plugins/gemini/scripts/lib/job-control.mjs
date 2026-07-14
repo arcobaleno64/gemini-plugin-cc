@@ -1,12 +1,14 @@
 import fs from "node:fs";
 
+import { classifyCliFailure } from "./failures.mjs";
 import { getSessionRuntimeStatus } from "./gemini.mjs";
-import { getConfig, listJobs, readJobFile, resolveJobFile } from "./state.mjs";
+import { getConfig, listJobs, readJobFile, resolveJobFile, upsertJob, writeJobFile } from "./state.mjs";
 import { SESSION_ID_ENV } from "./tracked-jobs.mjs";
 import { resolveWorkspaceRoot } from "./workspace.mjs";
 
 export const DEFAULT_MAX_STATUS_JOBS = 8;
 export const DEFAULT_MAX_PROGRESS_LINES = 4;
+export const DEFAULT_STALE_JOB_MS = 6 * 60 * 60 * 1000;
 
 export function sortJobsNewestFirst(jobs) {
   return [...jobs].sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
@@ -195,6 +197,125 @@ export function readStoredJob(workspaceRoot, jobId) {
   return readJobFile(jobFile);
 }
 
+function isActiveStatus(status) {
+  return status === "queued" || status === "running";
+}
+
+function defaultIsPidAlive(pid) {
+  if (!Number.isFinite(pid)) {
+    return false;
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
+}
+
+function activeJobAgeMs(job, nowMs) {
+  const started = Date.parse(job.startedAt ?? job.createdAt ?? job.updatedAt ?? "");
+  if (!Number.isFinite(started)) {
+    return 0;
+  }
+  return Math.max(0, nowMs - started);
+}
+
+function staleFailureForJob(job, options = {}) {
+  if (!isActiveStatus(job.status) || !Object.prototype.hasOwnProperty.call(job, "pid")) {
+    return null;
+  }
+
+  const staleJobMs = options.staleJobMs ?? DEFAULT_STALE_JOB_MS;
+  const nowMs = options.now ? new Date(options.now).getTime() : Date.now();
+  const isPidAlive = options.isPidAlive ?? defaultIsPidAlive;
+  if (!Number.isFinite(job.pid)) {
+    return classifyCliFailure({
+      category: "stale-job",
+      summary: `Job ${job.id} was marked ${job.status}, but it has no live worker pid.`
+    });
+  }
+  if (!isPidAlive(job.pid)) {
+    return classifyCliFailure({
+      category: "stale-job",
+      summary: `Job ${job.id} was marked ${job.status}, but worker pid ${job.pid} is no longer running.`
+    });
+  }
+  if (activeJobAgeMs(job, nowMs) > staleJobMs) {
+    return classifyCliFailure({
+      category: "stale-job",
+      summary: `Job ${job.id} exceeded the active-job stale threshold.`
+    });
+  }
+  return null;
+}
+
+function jobFileFailureForActiveJob(workspaceRoot, job) {
+  if (!isActiveStatus(job.status)) {
+    return null;
+  }
+  const jobFile = resolveJobFile(workspaceRoot, job.id);
+  if (!fs.existsSync(jobFile)) {
+    return null;
+  }
+  const stored = readJobFile(jobFile);
+  return stored?.failure?.category === "invalid-json" ? stored.failure : null;
+}
+
+function failActiveJob(workspaceRoot, job, failure) {
+  const jobFile = resolveJobFile(workspaceRoot, job.id);
+  const existing = fs.existsSync(jobFile) ? readJobFile(jobFile) : {};
+  // readJobFile synthesizes a status:"failed" placeholder when the job file
+  // itself is corrupt (invalid-json) — that's not a real terminal state, so
+  // it must still go through the write below. A genuine terminal status here
+  // means the worker finished on disk since this reconcile pass captured its
+  // now-stale snapshot (e.g. it just completed); don't clobber that result.
+  if (existing.status && !isActiveStatus(existing.status) && existing.failure?.category !== "invalid-json") {
+    return null;
+  }
+
+  const completedAt = new Date().toISOString();
+  const failed = {
+    ...job,
+    ...existing,
+    id: job.id,
+    status: "failed",
+    phase: "failed",
+    pid: null,
+    completedAt,
+    errorMessage: failure.summary,
+    failure
+  };
+  writeJobFile(workspaceRoot, job.id, failed);
+  upsertJob(workspaceRoot, {
+    id: job.id,
+    status: "failed",
+    phase: "failed",
+    pid: null,
+    completedAt,
+    errorMessage: failure.summary,
+    failure
+  });
+  return failed;
+}
+
+export function reconcileActiveJobs(workspaceRoot, jobs, options = {}) {
+  let changed = false;
+  const reconciled = jobs.map((job) => {
+    const failure = jobFileFailureForActiveJob(workspaceRoot, job) ?? staleFailureForJob(job, options);
+    if (!failure) {
+      return job;
+    }
+    const failed = failActiveJob(workspaceRoot, job, failure);
+    if (!failed) {
+      return job;
+    }
+    changed = true;
+    return failed;
+  });
+  return changed ? listJobs(workspaceRoot) : reconciled;
+}
+
 function matchJobReference(jobs, reference, predicate = () => true) {
   const filtered = jobs.filter(predicate);
   if (!reference) {
@@ -221,7 +342,7 @@ export function buildStatusSnapshot(cwd, options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const config = getConfig(workspaceRoot);
   // Default to the current Claude session; --all crosses every session.
-  const allJobs = listJobs(workspaceRoot);
+  const allJobs = reconcileActiveJobs(workspaceRoot, listJobs(workspaceRoot), options);
   const scopedJobs = options.all ? allJobs : filterJobsForCurrentSession(allJobs, options);
   const jobs = sortJobsNewestFirst(scopedJobs);
   const maxJobs = options.maxJobs ?? DEFAULT_MAX_STATUS_JOBS;
@@ -251,15 +372,21 @@ export function buildStatusSnapshot(cwd, options = {}) {
 
 export function buildSingleJobSnapshot(cwd, reference, options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
-  const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
-  const selected = matchJobReference(jobs, reference);
+  const jobs = sortJobsNewestFirst(reconcileActiveJobs(workspaceRoot, listJobs(workspaceRoot), options));
+  const exactGroup = reference ? jobs.filter((job) => job.groupId === reference) : [];
+  const selected = exactGroup[0] ?? matchJobReference(jobs, reference);
   if (!selected) {
     throw new Error(`No job found for "${reference}". Run /gemini:status to inspect known jobs.`);
   }
 
+  const grouped = selected.groupId
+    ? jobs.filter((job) => job.groupId === selected.groupId).map((job) => enrichJob(job, { maxProgressLines: options.maxProgressLines }))
+    : [];
+
   return {
     workspaceRoot,
-    job: enrichJob(selected, { maxProgressLines: options.maxProgressLines })
+    job: enrichJob(selected, { maxProgressLines: options.maxProgressLines }),
+    ...(selected.groupId ? { groupId: selected.groupId, jobs: grouped } : {})
   };
 }
 
@@ -290,6 +417,25 @@ export function resolveResultJob(cwd, reference, options = {}) {
   }
 
   throw new Error("No finished Gemini jobs found for this repository yet.");
+}
+
+export function resolveResultJobs(cwd, reference, options = {}) {
+  const workspaceRoot = resolveWorkspaceRoot(cwd);
+  const candidates = options.all ? listJobs(workspaceRoot) : filterJobsForCurrentSession(listJobs(workspaceRoot));
+  const jobs = sortJobsNewestFirst(candidates);
+  const exactGroup = reference ? jobs.filter((job) => job.groupId === reference) : [];
+  const selected = exactGroup[0] ?? resolveResultJob(cwd, reference, options).job;
+
+  if (!selected.groupId) {
+    return { workspaceRoot, job: selected };
+  }
+
+  const grouped = jobs.filter((job) => job.groupId === selected.groupId);
+  const active = grouped.find((job) => isActiveStatus(job.status));
+  if (active) {
+    throw new Error(`Review group ${selected.groupId} is still running (${active.id}: ${active.status}). Check /gemini:status and try again once it finishes.`);
+  }
+  return { workspaceRoot, groupId: selected.groupId, jobs: grouped };
 }
 
 export function resolveCancelableJob(cwd, reference, options = {}) {

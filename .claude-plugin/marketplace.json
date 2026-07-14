@@ -5,13 +5,13 @@
     "login": "arcobaleno64"
   },
   "metadata": {
-    "description": "Gemini/AGY companion plugin for Claude Code — delegate tasks, adversarial reviews, and rescue. Mirrors openai/codex-plugin-cc with Google Gemini.",
+    "description": "Use Gemini CLI or Antigravity CLI (agy) inside Claude Code for task delegation, code review, and adversarial review.",
     "version": "0.6.6"
   },
   "plugins": [
     {
       "name": "gemini",
-      "description": "Gemini/AGY companion plugin — delegation, adversarial review, rescue agent",
+      "description": "Gemini CLI and Antigravity CLI bridge for Claude Code task delegation and adversarial review",
       "version": "0.6.6",
       "author": {
         "name": "arcobaleno64"

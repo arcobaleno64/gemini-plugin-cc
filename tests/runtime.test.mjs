@@ -20,10 +20,16 @@ import {
 } from "./fake-gemini-fixture.mjs";
 import { initGitRepo, makeTempDir, run } from "./helpers.mjs";
 import {
+  readJobFile,
+  resolveJobFile,
   resolveStateDir,
   resolveStateFile,
   writeJobFile
 } from "../plugins/gemini/scripts/lib/state.mjs";
+import {
+  buildReviewPrompt,
+  dispatchAdversarialReview
+} from "../plugins/gemini/scripts/gemini-companion.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SCRIPT = path.join(ROOT, "plugins", "gemini", "scripts", "gemini-companion.mjs");
@@ -632,6 +638,14 @@ test("task surfaces a failed gemini turn as a non-zero exit", () => {
 
   const state = JSON.parse(fs.readFileSync(path.join(resolveStateDir(repo), "state.json"), "utf8"));
   assert.equal(state.jobs[0].status, "failed");
+  assert.equal(state.jobs[0].failure.category, "no-output");
+  assert.equal(typeof state.jobs[0].failure.nextStep, "string");
+
+  const status = JSON.parse(run("node", [SCRIPT, "status", "--json"], { cwd: repo, env: buildEnv(binDir) }).stdout);
+  assert.equal(status.latestFinished.failure.category, "no-output");
+
+  const stored = JSON.parse(run("node", [SCRIPT, "result", state.jobs[0].id, "--json"], { cwd: repo, env: buildEnv(binDir) }).stdout);
+  assert.equal(stored.storedJob.failure.category, "no-output");
 });
 
 test("task rejects an unknown engine", () => {
@@ -642,6 +656,87 @@ test("task rejects an unknown engine", () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Unknown engine/i);
+});
+
+test("dispatchAdversarialReview queues prompt-identical blind jobs with a shared groupId", () => {
+  const { repo } = setupRepo("review-findings");
+  const dataDir = makeTempDir();
+  commit(repo, "src/app.js", "export const value = items[0];\n");
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = items[0].id;\n");
+  const previousData = process.env.GEMINI_COMPANION_DATA;
+  process.env.GEMINI_COMPANION_DATA = dataDir;
+  const spawns = [];
+  const spawnFn = (...args) => {
+    spawns.push(args);
+    return { pid: 2000 + spawns.length, unref() {} };
+  };
+
+  try {
+    const dispatched = dispatchAdversarialReview({
+      cwd: repo,
+      scope: "working-tree",
+      engines: ["gemini", "agy"],
+      focusText: "challenge the retry design"
+    }, {
+      spawnFn,
+      detectEngineFn: (engine) => ({ engine })
+    });
+
+    assert.match(dispatched.groupId, /^review-group-/);
+    assert.equal(dispatched.jobIds.length, 2);
+    assert.equal(spawns.length, 2);
+    const jobs = dispatched.jobIds.map((jobId) => readJobFile(resolveJobFile(repo, jobId)));
+    assert.deepEqual(new Set(jobs.map((job) => job.groupId)), new Set([dispatched.groupId]));
+    assert.deepEqual(new Set(jobs.map((job) => job.engine)), new Set(["gemini", "agy"]));
+    const prompts = jobs.map((job) => job.request.preparedReview.prompt);
+    assert.equal(new Set(prompts).size, 1);
+    assert.equal(prompts[0], buildReviewPrompt(jobs[0].request).prompt);
+    assert.ok(!prompts[0].includes(dispatched.groupId), "blind prompts must not expose orchestration metadata");
+  } finally {
+    if (previousData === undefined) delete process.env.GEMINI_COMPANION_DATA;
+    else process.env.GEMINI_COMPANION_DATA = previousData;
+    fs.rmSync(repo, { recursive: true, force: true });
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchAdversarialReview degrades to one available engine with a stderr warning", () => {
+  const { repo } = setupRepo("review-findings");
+  const dataDir = makeTempDir();
+  commit(repo, "src/app.js", "export const value = 1;\n");
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = 2;\n");
+  const previousData = process.env.GEMINI_COMPANION_DATA;
+  process.env.GEMINI_COMPANION_DATA = dataDir;
+  let stderr = "";
+
+  try {
+    const dispatched = dispatchAdversarialReview({
+      cwd: repo,
+      scope: "working-tree",
+      engines: ["gemini", "agy"]
+    }, {
+      spawnFn: () => ({ pid: 3001, unref() {} }),
+      detectEngineFn(engine) {
+        if (engine === "agy") throw new Error("agy is unavailable");
+        return { engine };
+      },
+      stderr: { write(chunk) { stderr += chunk; } }
+    });
+
+    assert.equal(dispatched.groupId, null);
+    assert.deepEqual(dispatched.engines, ["gemini"]);
+    assert.deepEqual(dispatched.unavailableEngines, ["agy"]);
+    assert.equal(dispatched.jobIds.length, 1);
+    assert.match(stderr, /degraded to gemini.*unavailable: agy/i);
+    const job = readJobFile(resolveJobFile(repo, dispatched.jobIds[0]));
+    assert.equal(job.engine, "gemini");
+    assert.equal(job.groupId, undefined);
+  } finally {
+    if (previousData === undefined) delete process.env.GEMINI_COMPANION_DATA;
+    else process.env.GEMINI_COMPANION_DATA = previousData;
+    fs.rmSync(repo, { recursive: true, force: true });
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
 });
 
 test("task --background enqueues a detached worker and reports completion", async () => {
@@ -906,6 +1001,54 @@ test("result returns the stored output and resume hint for the latest finished j
   assert.match(result.stdout, /Handled the requested task\./);
   assert.match(result.stdout, /Gemini session ID: thr_finished/);
   assert.match(result.stdout, /Resume in Gemini: gemini --resume thr_finished/);
+});
+
+test("status and result aggregate adversarial-review jobs by groupId", () => {
+  const workspace = makeTempDir();
+  const groupId = "review-group-shared";
+  const jobs = [
+    { id: "review-gemini", engine: "gemini", verdict: "approve", summary: "Gemini approves." },
+    { id: "review-agy", engine: "agy", verdict: "needs-attention", summary: "AGY found a blocker." }
+  ];
+  seedState(workspace, jobs.map((job, index) => ({
+    id: job.id,
+    groupId,
+    engine: job.engine,
+    kind: "adversarial-review",
+    jobClass: "review",
+    title: "Gemini Adversarial Review",
+    status: "completed",
+    summary: job.summary,
+    createdAt: `2026-07-14T00:00:0${index}.000Z`,
+    updatedAt: `2026-07-14T00:00:0${index}.000Z`
+  })));
+  for (const job of jobs) {
+    writeJobFile(workspace, job.id, {
+      id: job.id,
+      groupId,
+      engine: job.engine,
+      status: "completed",
+      result: { result: { verdict: job.verdict, summary: job.summary, findings: [], next_steps: [] } },
+      rendered: `# Gemini Adversarial Review\n\nVerdict: ${job.verdict}\n\n${job.summary}\n`
+    });
+  }
+
+  const status = run("node", [SCRIPT, "status", groupId, "--json"], { cwd: workspace, env: envWithoutSession() });
+  assert.equal(status.status, 0, status.stderr);
+  const statusPayload = JSON.parse(status.stdout);
+  assert.equal(statusPayload.groupId, groupId);
+  assert.equal(statusPayload.jobs.length, 2);
+
+  const result = run("node", [SCRIPT, "result", groupId, "--json"], { cwd: workspace, env: envWithoutSession() });
+  assert.equal(result.status, 0, result.stderr);
+  const resultPayload = JSON.parse(result.stdout);
+  assert.equal(resultPayload.groupId, groupId);
+  assert.equal(resultPayload.results.length, 2);
+
+  const rendered = run("node", [SCRIPT, "result", groupId], { cwd: workspace, env: envWithoutSession() });
+  assert.equal(rendered.status, 0, rendered.stderr);
+  assert.match(rendered.stdout, /\| gemini \| review-gemini \| completed \| approve \|/i);
+  assert.match(rendered.stdout, /\| agy \| review-agy \| completed \| needs-attention \|/i);
 });
 
 test("cancel stops an active job and marks it cancelled", async (t) => {

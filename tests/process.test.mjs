@@ -6,7 +6,8 @@ import {
   terminateProcessTree,
   binaryAvailable,
   formatCommandFailure,
-  resolveBinaryPath
+  resolveBinaryPath,
+  runCommand
 } from "../plugins/gemini/scripts/lib/process.mjs";
 
 test("terminateProcessTree uses taskkill on Windows", () => {
@@ -86,6 +87,24 @@ test("resolveBinaryPath finds a PATH command and passes absolute paths through",
   assert.equal(typeof git, "string");
   assert.match(git, /git/i);
   assert.equal(resolveBinaryPath("/already/absolute/tool"), "/already/absolute/tool");
+});
+
+test("runCommand preserves a spaced argv element when shell is enabled", () => {
+  const result = runCommand(process.execPath, ["-p", "JSON.stringify(process.argv.slice(1))", "argument with spaces"], {
+    shell: true
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), '["argument with spaces"]');
+});
+
+test("runCommand leaves argv unchanged when shell is disabled", () => {
+  const result = runCommand(process.execPath, ["-p", "JSON.stringify(process.argv.slice(1))", "argument with spaces"], {
+    shell: false
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), '["argument with spaces"]');
 });
 
 test("formatCommandFailure formats exit-code and signal failures", () => {

@@ -6,18 +6,18 @@
 // Preview model IDs (those ending in `-preview`) track Google's Gemini preview
 // channel and can change without notice; override any alias with `--model <id>`.
 //
-//   lastVerified: model IDs last checked against gemini CLI 0.44.1.
+//   lastVerified: model IDs last checked against gemini CLI 0.44.1 on 2026-06-02.
 //   source:       gemini CLI model listing / Google Gemini API model names.
 export const MODEL_MAP_METADATA = {
   lastVerified: "2026-06",
-  source: "gemini CLI 0.44.1 (latest) live model probe / Google Gemini API model names",
-  note: "Preview model IDs (…-preview) may change; override with --model <id>. NOTE: gemini-3.5-flash/-pro are GA on the API but NOT served by gemini CLI 0.44.1 (404) — reach 3.5 Flash via the AGY engine. Unknown/unavailable model ids degrade gracefully to the GA fallback at runtime."
+  source: "gemini CLI 0.44.1 live model probe on 2026-06-02 / Google Gemini API model names",
+  note: "Preview model IDs (…-preview) may change; override with --model <id>. The 2026-06-02 probe returned 404 for gemini-3.5-flash/-pro on gemini CLI 0.44.1, but newer CLI releases may differ. Unknown/unavailable model ids degrade gracefully to the GA fallback at runtime."
 };
 
 // Ordered alias entries. `preview: true` marks IDs that can change.
 export const MODEL_ALIAS_ENTRIES = [
-  { alias: "flash", model: "gemini-3-flash-preview", label: "Latest Gemini 3 Flash (preview)", preview: true },
-  { alias: "flash3", model: "gemini-3-flash-preview", label: "Latest Gemini 3 Flash (preview)", preview: true },
+  { alias: "flash", model: "gemini-3-flash-preview", label: "Gemini 3 Flash (preview)", preview: true },
+  { alias: "flash3", model: "gemini-3-flash-preview", label: "Gemini 3 Flash (preview)", preview: true },
   { alias: "pro", model: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (preview)", preview: true },
   { alias: "pro3", model: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (preview)", preview: true },
   { alias: "lite3", model: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite (GA, cost-efficient)", preview: false },
@@ -30,10 +30,10 @@ export const MODEL_ALIAS_ENTRIES = [
 export const MODEL_ALIASES = new Map(MODEL_ALIAS_ENTRIES.map((entry) => [entry.alias, entry.model]));
 
 // Reasoning-effort tier -> resolved model, used when --effort is supplied
-// without an explicit --model. These apply to the GEMINI engine only: AGY's
-// `agy --print` is hardcoded to Gemini 3.5 Flash (High) and exposes no
-// --model/--effort flag (env / settings.json cannot override it), so both are
-// ignored on the AGY path — higher/other tiers are reachable only via gemini.
+// without an explicit --model. These apply to the GEMINI engine only. The AGY
+// CLI has its own model surface in newer versions, but this plugin does not
+// translate Gemini aliases / effort tiers to AGY arguments yet, so plugin-managed
+// model selection remains a gemini-engine feature.
 // See lib/gemini.mjs (the agy branch nulls model and emits a note).
 export const EFFORT_MODEL_MAP = new Map([
   ["none", "gemini-2.5-flash-lite"],

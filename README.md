@@ -1,10 +1,35 @@
-# gemini — Claude Code Plugin
+# Gemini / Antigravity Companion for Claude Code
 
-> Delegate tasks and adversarial code reviews to Google Gemini / AGY directly from Claude Code.
+> Use Gemini CLI or Antigravity CLI (`agy`) inside Claude Code for task delegation, pragmatic code review, and adversarial review.
+
+**Transition-ready for Google's Gemini CLI to Antigravity CLI migration.**
+`gemini-plugin-cc` keeps the familiar Claude Code slash-command workflow while letting you route work to Gemini CLI where available, or to Antigravity CLI (`agy`) during the post-June-2026 transition.
 
 [繁體中文說明 →](README.zh-TW.md)
 
 Ported from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (Apache-2.0) — same slash-command UX, same background job model, same skill contract — powered by the Gemini ecosystem instead of OpenAI.
+
+---
+
+## Why this plugin?
+
+`gemini-plugin-cc` is a Claude Code-native companion bridge for users who want both Gemini CLI and Antigravity CLI (`agy`) support during Google's Gemini CLI transition.
+
+Compared with AGY-only, multi-host plugins, this project keeps the Gemini CLI path where available while providing an explicit `--engine agy` route for users migrating to Antigravity CLI.
+
+- Claude Code-native `/gemini:*` slash commands.
+- Pragmatic and adversarial code review over the current diff or branch.
+- Background task delegation for longer-running companion-agent work.
+- Gemini model aliases, graceful model fallback, and transient review retry.
+- AGY transcript recovery for `agy --print` non-pipe behavior.
+- Safer stdin prompt delivery on the Gemini engine.
+
+| Need | Use this plugin when... |
+|---|---|
+| Gemini CLI still works for you | You want model selection, JSON output, and stdin prompt delivery. |
+| You are migrating to AGY | Use `--engine agy` for Antigravity CLI fallback. |
+| You want adversarial review | Use `/gemini:adversarial-review` with optional focus text. |
+| You need AGY-only multi-host support | Consider an AGY-only plugin instead. |
 
 ---
 
@@ -28,7 +53,7 @@ Ported from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) 
 |---|---|---|
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
 | Gemini CLI | ≥ 0.40 | `npm install -g @google/gemini-cli` |
-| AGY _(optional)_ | ≥ 1.0.3 | _(see install note below)_ |
+| AGY _(optional)_ | ≥ 1.0.3 (1.1.0 verified) | _(see install note below)_ |
 | Claude Code | any | [claude.ai/code](https://claude.ai/code) |
 
 **Install AGY** (optional fallback): `curl -fsSL https://antigravity.google/cli/install.sh | bash`
@@ -36,8 +61,8 @@ Ported from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) 
 **Authentication**: Run `gemini` once to complete OAuth. No API key is required.
 
 > **Heads-up (reality check):**
-> - **2026-06-18**: free/personal gemini CLI access ends. After that the **gemini** engine needs a paid Gemini Code Assist Standard/Enterprise tier; **AGY** (`--engine agy`) becomes the free path.
-> - **Gemini 3.5** (Flash/Pro) is GA on the API but **not served by the gemini CLI 0.44.1** (latest) — it returns 404. Use it via the **AGY** engine (fixed model). The plugin gracefully falls back to a GA model if a requested id is unavailable. See [Model Aliases](#model-aliases) and [docs/MODEL_COMPARISON.md](docs/MODEL_COMPARISON.md).
+> - **2026-06-18 consumer transition**: Google announced that free/personal, Google AI Pro, and Google AI Ultra Gemini CLI requests stop being served after this date; Standard/Enterprise access remains. See Google's [Gemini CLI to Antigravity CLI announcement](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/).
+> - **Model availability drifts by CLI version.** In the 2026-06-02 probe against gemini CLI 0.44.1, `gemini-3.5-*` returned `404 ModelNotFound`; newer CLI releases may differ. The plugin gracefully falls back to a GA model if a requested id is unavailable. See [Model Aliases](#model-aliases) and [docs/MODEL_COMPARISON.md](docs/MODEL_COMPARISON.md).
 
 ---
 
@@ -58,7 +83,7 @@ Ported from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) 
 
 ### Pinned release (a specific published version)
 
-Pin the marketplace to a release tag — e.g. the latest, `v0.6.6`:
+Pin the marketplace to a release tag — e.g. `v0.6.6`:
 
 ```
 /plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.6.6
@@ -153,7 +178,7 @@ Lists active and recent background jobs. Pass a job ID to inspect a single job.
 
 ### `/gemini:result [job-id]`
 
-Retrieves the output of a completed job. If the job has a Gemini session ID, the output includes `Resume in Gemini: gemini resume <session-id>` — paste that into a terminal to continue the session in Gemini CLI directly.
+Retrieves the output of a completed job. If the job has a Gemini session ID, the output includes `Resume in Gemini: gemini --resume <session-id>` — paste that into a terminal to continue the session in Gemini CLI directly.
 
 ### `/gemini:cancel [job-id]`
 
@@ -183,7 +208,7 @@ When enabled and the review returns `needs-attention`, Claude Code is blocked fr
 
 | Alias | Resolved Model | Notes |
 |---|---|---|
-| `flash` / `flash3` | `gemini-3-flash-preview` | Latest Gemini 3 Flash (preview) |
+| `flash` / `flash3` | `gemini-3-flash-preview` | Gemini 3 Flash (preview) |
 | `pro` / `pro3` | `gemini-3.1-pro-preview` | Gemini 3.1 Pro (preview) |
 | `flash25` | `gemini-2.5-flash` | Stable 2.5 Flash (GA) |
 | `pro25` | `gemini-2.5-pro` | Stable 2.5 Pro (GA) |
@@ -194,10 +219,10 @@ When enabled and the review returns `needs-attention`, Claude Code is blocked fr
 
 - Aliases and effort tiers live in a single source of truth — `plugins/gemini/scripts/lib/model-map.mjs` — and `npm test` verifies the table above against it, so the two cannot drift.
 - **Effort mapping** (applied when `--effort` is given without `--model`): `none`/`minimal` → `gemini-2.5-flash-lite`; `low`/`medium` → `gemini-3-flash-preview`; `high`/`xhigh` → `gemini-3.1-pro-preview`.
-- **Preview IDs may change.** Model IDs ending in `-preview` track Google's preview channel (last verified against gemini CLI 0.44.1). If an alias stops resolving, override it with `--model <exact-id>` — any value that is not a known alias is passed through to the CLI unchanged.
-- **Gemini 3.5 is not on the CLI yet.** `gemini-3.5-flash` and `gemini-3.5-pro` are GA on the Gemini API but are **not served by the gemini CLI 0.44.1** (latest at time of writing) — they return `404 ModelNotFound`. To use Gemini 3.5 Flash, route through the **AGY engine** (`--engine agy`), which runs it (fixed model; no `--model`/`--effort` selection).
+- **CLI probe snapshot.** The alias table reflects the model-map probe from 2026-06-02 against gemini CLI 0.44.1. Newer Gemini CLI releases may serve different model IDs. If an alias stops resolving, override it with `--model <exact-id>` — any value that is not a known alias is passed through to the CLI unchanged.
+- **Gemini 3.5 availability can drift.** The 2026-06-02 gemini CLI 0.44.1 probe returned `404 ModelNotFound` for `gemini-3.5-flash` and `gemini-3.5-pro`; newer CLI releases may differ. Unknown or unavailable model IDs degrade gracefully to the GA fallback.
 - **Graceful model fallback.** If a requested model id is not found on your gemini CLI (preview/retired id, or a CLI-version mismatch), the plugin retries the run **once on the GA fallback `gemini-2.5-flash`** and prints a clear note — so a stale id degrades gracefully instead of hard-failing.
-- **AGY ignores `--model` and `--effort`.** `agy --print` is locked to Gemini 3.5 Flash (High) and exposes no model/effort selection; the plugin prints a note and ignores both flags when `--engine agy` is active.
+- **AGY model selection is not managed by this plugin yet.** Some AGY versions expose their own `--model` surface, but `--engine agy` currently runs through AGY's configured/default model and the plugin does not translate `--model` or `--effort` to AGY arguments. Use `--engine gemini` for plugin-managed model selection.
 
 ---
 
@@ -210,9 +235,9 @@ In `auto` mode the plugin selects the first available engine in this order:
 
 Override via `--engine` flag or the `GEMINI_ENGINE` environment variable.
 
-> `--model` and `--effort` apply to the **gemini** engine only. `agy --print` is locked to Gemini 3.5 Flash (High) and has no model/effort flag, so the plugin ignores `--model`/`--effort` when `--engine agy` is active.
+> `--model` and `--effort` are managed by the **gemini** engine only. `--engine agy` currently leaves model choice to AGY's configured/default behavior; the plugin does not translate Gemini aliases or effort tiers to AGY arguments.
 
-> **AGY transcript recovery is platform-verified on Windows and macOS; Linux is reported working.** Because `agy --print` does not pipe its output (upstream [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466) — reproduced on macOS agy 1.0.7: 0 bytes reach stdout through a pipe), the plugin recovers AGY responses from the on-disk "brain" transcript under `~/.gemini/antigravity-cli/brain` (Windows 1.0.3 and macOS 1.0.7, both verified — same root) or `~/.antigravity-cli/brain` (Linux 1.0.2, reported). If `--engine agy` reports no brain root on your machine, run `agy` once so it creates the directory, or open an issue with its actual location.
+> **AGY transcript recovery is platform-verified on Windows and macOS; Linux is reported working.** Because `agy --print` does not pipe its output (upstream [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466) — reproduced on macOS agy 1.0.7: 0 bytes reach stdout through a pipe), the plugin recovers AGY responses from the on-disk "brain" transcript under `~/.gemini/antigravity-cli/brain` (Windows 1.0.3 and 1.1.0, macOS 1.0.7 — all verified, same root) or `~/.antigravity-cli/brain` (Linux 1.0.2, reported). If `--engine agy` reports no brain root on your machine, run `agy` once so it creates the directory, or open an issue with its actual location.
 
 ---
 
@@ -274,7 +299,7 @@ This plugin is a high-fidelity port of [openai/codex-plugin-cc](https://github.c
 | `/codex:adversarial-review` | `/gemini:adversarial-review` | **best-effort equivalent** — adversarial prompt over the same diff target |
 | `/codex:rescue` | `/gemini:rescue` | **1:1 parity** — same forwarder/subagent contract and flags |
 | `/codex:status` | `/gemini:status` | **1:1 parity** — same job model; `--all` crosses Claude sessions |
-| `/codex:result` | `/gemini:result` | **Gemini-specific divergence** — surfaces the Gemini session id + `gemini resume` |
+| `/codex:result` | `/gemini:result` | **Gemini-specific divergence** — surfaces the Gemini session id + `gemini --resume` |
 | `/codex:cancel` | `/gemini:cancel` | **1:1 parity** — same process-tree termination (POSIX + Windows) |
 
 ### Codex app server vs Gemini CLI adapter
@@ -282,7 +307,7 @@ This plugin is a high-fidelity port of [openai/codex-plugin-cc](https://github.c
 - **Runtime**: Codex uses a persistent app-server with native review and persistent threads. This plugin invokes the Gemini CLI directly *per command* (no shared runtime); AGY is an optional fallback.
 - **Standard review**: In the Codex plugin, `/codex:review` is a *native* reviewer. Here, `/gemini:review` is a **prompt-based / CLI-adapter equivalent** — it sends the diff to Gemini with a pragmatic-review prompt and parses structured JSON back. It is not a native Gemini reviewer.
 - **Sandbox**: Codex exposes `read-only` / `workspace-write` sandboxes. Gemini has no equivalent; write access is gated by `--write` (`--yolo`), and otherwise the prompt enforces read-only discipline. (`--approval-mode plan` is intentionally not used: it requires a TTY and conflicts with stdin prompt delivery.)
-- **Thread/session resume**: Codex persists threads on the app server. Here, resume relies on the Gemini CLI **session id** captured from the JSON envelope; `/gemini:result` prints `gemini resume <session-id>`, and `--resume-last` continues the latest thread *for the current Claude session*.
+- **Thread/session resume**: Codex persists threads on the app server. Here, resume relies on the Gemini CLI **session id** captured from the JSON envelope; `/gemini:result` prints `gemini --resume <session-id>`, and `--resume-last` continues the latest thread *for the current Claude session*.
 
 ---
 
@@ -302,7 +327,7 @@ Three skills are bundled for Claude Code to consume:
 
 Documented, non-blocking constraints — see the linked sections for detail:
 
-- **Gemini 3.5 is not served by the gemini CLI, and the free CLI sunsets 2026-06-18.** `gemini-3.5-*` returns 404 on CLI 0.44.1 (reach it via AGY); a requested id that is not served degrades gracefully to the GA fallback `gemini-2.5-flash`. After 2026-06-18 the free/personal CLI tier ends. See [Model Alias Notes](#model-alias-notes) and [docs/MODEL_COMPARISON.md](docs/MODEL_COMPARISON.md).
+- **Model and access availability drift.** Google announced the 2026-06-18 consumer Gemini CLI transition; Gemini model IDs served by the CLI also change over time. This plugin keeps a GA fallback for unavailable Gemini model IDs. See [Model Alias Notes](#model-alias-notes) and [docs/MODEL_COMPARISON.md](docs/MODEL_COMPARISON.md).
 - **`/gemini:review` is a prompt/CLI adapter, not a native reviewer.** It sends the diff with a review prompt and parses the structured JSON, rather than using an app-server reviewer, so its feedback depth differs from a native one. See [Codex app server vs Gemini CLI adapter](#codex-app-server-vs-gemini-cli-adapter).
 
 ---

@@ -100,19 +100,19 @@ If a point is an inference, label it clearly.
 </grounding_rules>
 ```
 
-## Expecting `--model` / `--effort` to change AGY (AGY-specific)
+## Expecting plugin `--model` / `--effort` to control AGY (AGY-specific)
 
 Bad:
 
 ```text
-Use --engine agy --model gemini-3.1-pro-preview --effort high to force the strongest model.
+Use --engine agy --model gemini-3.1-pro-preview --effort high to force AGY through the plugin's Gemini aliases.
 ```
 
 Better:
-- Use the **gemini** engine when you need a specific model or effort tier — `--effort high` → `gemini-3.1-pro-preview`.
-- For AGY, drop `--model`/`--effort`: `agy --print` is locked to Gemini 3.5 Flash (High) and the plugin ignores both flags (it prints a note when you pass them).
+- Use the **gemini** engine when you need this plugin to pick a specific model or effort tier — `--effort high` → `gemini-3.1-pro-preview`.
+- For AGY, treat `--model`/`--effort` as unmanaged by this plugin: it leaves model choice to AGY's configured/default behavior and prints a note when you pass those flags.
 
-Explanation: AGY exposes no model/effort selection at invocation time. Choosing capability is a gemini-engine concern only.
+Explanation: AGY's own model surface can change by AGY version, and it is not the same contract as this plugin's Gemini alias / effort map. Plugin-managed capability selection is a gemini-engine concern only.
 
 ## Expecting AGY to return output on stdout (AGY-specific)
 

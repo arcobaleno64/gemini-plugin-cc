@@ -2,8 +2,23 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 
+// This is not a reliable cmd.exe escaper: embedded quotes toggle cmd's parse
+// state, and backslashes escape quotes for MSVCRT children, not for cmd.exe.
+// Keep it only as a belt-and-suspenders safety net for the fixed-constant argv
+// used by remaining bare-name command paths (git/where/gemini/taskkill), never
+// as protection for free text. Gemini prompts use stdin; agy's free-text prompt
+// is protected by absolute-path resolution and therefore shell:false instead.
+const WINDOWS_SHELL_UNSAFE = /[\s|<>&()^"]/;
+function quoteForWindowsShell(arg) {
+  if (typeof arg !== "string" || !WINDOWS_SHELL_UNSAFE.test(arg)) return arg;
+  return `"${arg.replace(/"/g, '\\"')}"`;
+}
+
 export function runCommand(command, args = [], options = {}) {
-  const result = spawnSync(command, args, {
+  const shell = options.shell ?? (process.platform === "win32" && !path.isAbsolute(command));
+  const safeCommand = shell ? quoteForWindowsShell(command) : command;
+  const safeArgs = shell ? args.map(quoteForWindowsShell) : args;
+  const result = spawnSync(safeCommand, safeArgs, {
     cwd: options.cwd,
     env: options.env,
     encoding: "utf8",
@@ -12,7 +27,7 @@ export function runCommand(command, args = [], options = {}) {
     // Absolute paths are spawned directly (shell:false) so arguments are passed
     // literally and never re-parsed by the shell. Bare command names still use the
     // shell on Windows to resolve .cmd/.ps1 wrappers (npm global bins).
-    shell: options.shell ?? (process.platform === "win32" && !path.isAbsolute(command)),
+    shell,
     windowsHide: true,
     ...(options.maxBuffer != null && { maxBuffer: options.maxBuffer }),
     ...(options.timeout != null && { timeout: options.timeout }),
@@ -56,20 +71,23 @@ export function binaryAvailable(command, versionArgs = ["--version"], options = 
   return { available: true, detail: result.stdout.trim() || result.stderr.trim() || "ok" };
 }
 
-export function resolveBinaryPath(command) {
+export function resolveBinaryPath(command, { requireExe = false } = {}) {
   if (path.isAbsolute(command)) {
-    return command;
+    return !requireExe || path.extname(command).toLowerCase() === ".exe" ? command : null;
   }
   const finder = process.platform === "win32" ? "where" : "which";
   const result = runCommand(finder, [command]);
   if (result.status !== 0) {
     return null;
   }
-  const first = result.stdout
+  const candidates = result.stdout
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter(Boolean)[0];
-  return first || null;
+    .filter((line) => line && path.isAbsolute(line));
+  const resolved = requireExe
+    ? candidates.find((candidate) => path.extname(candidate).toLowerCase() === ".exe")
+    : candidates[0];
+  return resolved ?? null;
 }
 
 function looksLikeMissingProcessMessage(text) {

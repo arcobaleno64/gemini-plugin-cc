@@ -31,17 +31,31 @@
 //     Linux 1.0.2 reported at ~/.antigravity-cli/brain. Timeout grace IS
 //     applied in runGeminiTurn (agy --print-timeout window < the hard spawn
 //     kill).
+//
+// AGY 1.1.0 (2026-07-08): `agy --help` confirms this brain-root path and the
+// four flags this file/engine.mjs depend on are unchanged; 1.1.0's global
+// config-dir fix (~/.gemini/antigravity-cli/ -> ~/.gemini/config/) is about
+// the /agents subagent-definition dir, a different path from the brain root
+// below. Machine-verified 2026-07-09 (Windows): 1.1.0's new default
+// `request-review` mode does NOT stall a headless `--engine agy --write`
+// spawn — --dangerously-skip-permissions still bypasses it. Separately found
+// (and fixed in buildCliArgs via --new-project, see engine.mjs and
+// CHANGELOG): without an active workspace, that same write turn used to
+// silently land its file under this brain root's sibling `scratch/` dir
+// instead of `cwd`.
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// Candidate brain roots, newest-platform first. Verified: 1.0.3 Windows and
-// 1.0.7 macOS (same root). Reported: 1.0.2 Linux.
+import { classifyCliFailure } from "./failures.mjs";
+
+// Candidate brain roots, newest-platform first. Verified: 1.0.3 and 1.1.0
+// Windows, 1.0.7 macOS (same root). Reported: 1.0.2 Linux.
 export function agyBrainRoots() {
   const home = os.homedir();
   return [
-    path.join(home, ".gemini", "antigravity-cli", "brain"), // 1.0.3 Windows + 1.0.7 macOS (verified)
+    path.join(home, ".gemini", "antigravity-cli", "brain"), // 1.0.3/1.1.0 Windows + 1.0.7 macOS (verified)
     path.join(home, ".antigravity-cli", "brain"),           // 1.0.2 Linux (reported)
   ];
 }
@@ -123,13 +137,17 @@ export function readAgyTranscript(brainRoot, convDir) {
       // try next candidate
     }
   }
-  if (!file) return { response: null, thinking: null, done: false, reason: "no transcript file found" };
+  if (!file) {
+    const reason = "no transcript file found";
+    return { response: null, thinking: null, done: false, reason, failure: classifyCliFailure({ transcriptReason: reason }) };
+  }
 
   let raw;
   try {
     raw = fs.readFileSync(file, "utf8");
   } catch (e) {
-    return { response: null, thinking: null, done: false, reason: `transcript read failed: ${e.message}` };
+    const reason = `transcript read failed: ${e.message}`;
+    return { response: null, thinking: null, done: false, reason, failure: classifyCliFailure({ transcriptReason: reason }) };
   }
 
   // JSONL: one object per line. Tolerate partial/garbled lines (a SIGKILL during
@@ -149,14 +167,19 @@ export function readAgyTranscript(brainRoot, convDir) {
     }
   }
 
-  if (!last) return { response: null, thinking: null, done: false, reason: "no PLANNER_RESPONSE row in transcript" };
+  if (!last) {
+    const reason = "no PLANNER_RESPONSE row in transcript";
+    return { response: null, thinking: null, done: false, reason, failure: classifyCliFailure({ transcriptReason: reason }) };
+  }
 
   const done = last.status === "DONE";
+  const reason = done ? "ok" : `final PLANNER_RESPONSE status=${last.status ?? "unknown"} — possible truncation from spawn timeout`;
   return {
     response: last.content ?? null,
     thinking: last.thinking ?? null,
     done, // false => agy was likely SIGKILLed before finishing (see timeout grace, TODO-3 integration note)
-    reason: done ? "ok" : `final PLANNER_RESPONSE status=${last.status ?? "unknown"} — possible truncation from spawn timeout`,
+    reason,
+    ...(!done ? { failure: classifyCliFailure({ transcriptReason: reason }) } : {})
   };
 }
 
@@ -164,15 +187,24 @@ export function readAgyTranscript(brainRoot, convDir) {
 // result here AFTER the spawn returns.
 export function recoverAgyResponse(brainRoot, beforeSnapshot) {
   if (!brainRoot) {
-    return { response: null, thinking: null, done: false, confident: false, convDir: null, reason: "no agy brain root found on this platform (run agy once to create it; see agyBrainRoots() for the known roots)" };
+    const reason = "no agy brain root found on this platform (run agy once to create it; see agyBrainRoots() for the known roots)";
+    return { response: null, thinking: null, done: false, confident: false, convDir: null, reason, failure: classifyCliFailure({ transcriptReason: reason }) };
   }
   const after = listConvDirs(brainRoot);
   const picked = pickNewConvDir(beforeSnapshot, after);
   if (!picked.dir) {
-    return { response: null, thinking: null, done: false, confident: false, convDir: null, reason: picked.reason };
+    return { response: null, thinking: null, done: false, confident: false, convDir: null, reason: picked.reason, failure: classifyCliFailure({ transcriptReason: picked.reason }) };
   }
   const t = readAgyTranscript(brainRoot, picked.dir);
-  return { ...t, confident: picked.confident && t.done, convDir: picked.dir, reason: picked.confident ? t.reason : `${picked.reason}; ${t.reason}` };
+  const reason = picked.confident ? t.reason : `${picked.reason}; ${t.reason}`;
+  const failure = t.failure ?? (!picked.confident ? classifyCliFailure({ transcriptReason: reason }) : null);
+  return {
+    ...t,
+    confident: picked.confident && t.done,
+    convDir: picked.dir,
+    reason,
+    ...(failure ? { failure } : {})
+  };
 }
 
 /* ============================================================================
