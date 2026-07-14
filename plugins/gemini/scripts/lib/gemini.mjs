@@ -225,21 +225,30 @@ export async function runGeminiTurn(cwd, options = {}) {
     // by diffing the conversation dirs captured before/after the spawn.
     const rec = recoverAgyResponse(agyBrainRoot, agyBefore);
     if (!rec.response) {
-      throw new Error(
-        `AGY produced no recoverable response (${rec.reason}). agy --print does not pipe output (google-gemini/gemini-cli#27466); transcript recovery failed.`
-      );
+      if (exitCode === 0) exitCode = 1;
+      recoveryFailure = classifyCliFailure({
+        engine: engineInfo.engine,
+        status: exitCode,
+        signal: result.signal,
+        error: result.error,
+        stdout: rawStdout,
+        stderr: rawStderr,
+        transcriptReason: rec.reason,
+        noOutput: !finalMessage
+      });
+    } else {
+      recoveryFailure = rec.failure ?? null;
+      if (!rec.confident) {
+        process.stderr.write(`[gemini-companion] Warning: AGY transcript match is not certain (${rec.reason}). Verify the response corresponds to this run.\n`);
+      }
+      finalMessage = String(rec.response).trim();
+      threadId = rec.convDir ?? null; // agy conversation id — resume via --conversation <id>
+      reasoningSummary = rec.thinking ?? reasoningSummary;
+      // Success is defined by a completed transcript row, not the (often killed)
+      // exit code: agy frequently hangs until --print-timeout even on success.
+      if (rec.done) exitCode = 0;
+      else if (exitCode === 0) exitCode = 1; // recovered but truncated → signal partial
     }
-    recoveryFailure = rec.failure ?? null;
-    if (!rec.confident) {
-      process.stderr.write(`[gemini-companion] Warning: AGY transcript match is not certain (${rec.reason}). Verify the response corresponds to this run.\n`);
-    }
-    finalMessage = String(rec.response).trim();
-    threadId = rec.convDir ?? null; // agy conversation id — resume via --conversation <id>
-    reasoningSummary = rec.thinking ?? reasoningSummary;
-    // Success is defined by a completed transcript row, not the (often killed)
-    // exit code: agy frequently hangs until --print-timeout even on success.
-    if (rec.done) exitCode = 0;
-    else if (exitCode === 0) exitCode = 1; // recovered but truncated → signal partial
   } else if (useJson) {
     // For gemini engine with JSON output, extract response text and session_id
     const outer = tryParseJsonFromText(rawStdout);
@@ -374,19 +383,28 @@ export async function runGeminiReview(cwd, options = {}) {
     // parse the JSON findings out of the recovered text.
     const rec = recoverAgyResponse(agyBrainRoot, agyBefore);
     if (!rec.response) {
-      throw new Error(
-        `AGY produced no recoverable review (${rec.reason}). agy --print does not pipe output (google-gemini/gemini-cli#27466); transcript recovery failed.`
-      );
+      if (exitCode === 0) exitCode = 1;
+      recoveryFailure = classifyCliFailure({
+        engine: engineInfo.engine,
+        status: exitCode,
+        signal: result.signal,
+        error: result.error,
+        stdout: rawStdout,
+        stderr: rawStderr,
+        transcriptReason: rec.reason,
+        noOutput: !reviewText
+      });
+    } else {
+      recoveryFailure = rec.failure ?? null;
+      if (!rec.confident) {
+        process.stderr.write(`[gemini-companion] Warning: AGY transcript match is not certain (${rec.reason}). Verify the review corresponds to this run.\n`);
+      }
+      reviewText = String(rec.response).trim();
+      reviewJson = tryParseJsonFromText(reviewText);
+      reasoningSummary = rec.thinking ?? reasoningSummary;
+      if (rec.done) exitCode = 0;
+      else if (exitCode === 0) exitCode = 1; // recovered but truncated → signal partial
     }
-    recoveryFailure = rec.failure ?? null;
-    if (!rec.confident) {
-      process.stderr.write(`[gemini-companion] Warning: AGY transcript match is not certain (${rec.reason}). Verify the review corresponds to this run.\n`);
-    }
-    reviewText = String(rec.response).trim();
-    reviewJson = tryParseJsonFromText(reviewText);
-    reasoningSummary = rec.thinking ?? reasoningSummary;
-    if (rec.done) exitCode = 0;
-    else if (exitCode === 0) exitCode = 1; // recovered but truncated → signal partial
   } else if (useJson) {
     // Gemini --output-format json wraps the response in an outer JSON envelope.
     // The text payload lives at different paths depending on CLI version:
