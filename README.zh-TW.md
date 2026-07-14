@@ -40,7 +40,7 @@
 - **`/gemini:status`** — 查看作用中與已完成的背景工作。
 - **`/gemini:result`** / **`/gemini:cancel`** — 取得或取消背景工作。
 - **引擎自動偵測** — 優先使用 `gemini` CLI（支援 pipe 輸出）；備援退回至 `agy`。
-- **Stdin 提示傳遞** — 提示透過 stdin 傳入，消除 Windows `.cmd` wrapper 問題與 shell injection 風險。
+- **Gemini stdin 提示傳遞** — gemini 引擎的提示透過 stdin 傳入，消除 Windows `.cmd` wrapper 問題與 shell injection 風險。
 - **會話生命週期掛鉤** — 自動注入 `GEMINI_COMPANION_SESSION_ID`；會話結束時清理殘留工作。
 
 ---
@@ -81,15 +81,15 @@
 
 ### 釘選發布版（指定某個已發布版本）
 
-將 marketplace 釘到某個 release 標籤——例如 `v0.6.6`：
+將 marketplace 釘到某個 release 標籤——例如 `v0.7.0`：
 
 ```
-/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.6.6
+/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.7.0
 /plugin install gemini@gemini-plugin-cc
 /reload-plugins
 ```
 
-> Claude Code 從 git tree 安裝外掛，**並非**從 GitHub Releases 的 tarball——`@<tag>` 選的是 [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases) 背後的 git 標籤。釘版安裝**不會**自動更新；欲升至新版，請以新標籤重新加入 marketplace（例如 `…@v0.6.7`）。
+> Claude Code 從 git tree 安裝外掛，**並非**從 GitHub Releases 的 tarball——`@<tag>` 選的是 [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases) 背後的 git 標籤。釘版安裝**不會**自動更新；欲升至新版，請以新標籤重新加入 marketplace（例如 `…@v0.7.1`）。
 
 接著執行 `/gemini:setup`——若 Gemini CLI 尚未安裝且 npm 可用，指令會提供自動安裝選項。
 
@@ -229,22 +229,22 @@
 在 `auto` 模式下，外掛依以下優先順序選擇可用引擎：
 
 1. **`gemini` CLI** — 透過 stdout 輸出；支援 stdin 提示傳遞。
-2. **`agy`** — 備援引擎；注意 AGY 在非互動模式下無法寫入 pipe，需明確使用 `--engine agy` 才能強制啟用。
+2. **`agy`** — 備援引擎；截至外掛 v0.7.0，adapter 仍使用 `agy --print <prompt>` 並從磁碟 transcript 恢復回應，需明確使用 `--engine agy` 才能強制啟用。
 
 可透過 `--engine` 旗標或 `GEMINI_ENGINE` 環境變數覆蓋。
 
 > `--model` 與 `--effort` 只由 **gemini** 引擎管理。`--engine agy` 目前讓 AGY 使用其 configured/default model；本外掛不會把 Gemini aliases 或 effort tiers 翻譯成 AGY 參數。
 
-> **AGY 紀錄恢復已於 Windows 與 macOS 驗證通過；Linux 為回報可用。** 因 `agy --print` 不透過 pipe 輸出（上游 [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466)——已於 macOS agy 1.0.7 重現：pipe 下 stdout 為 0 bytes），外掛改從磁碟上的「brain」紀錄恢復回應——`~/.gemini/antigravity-cli/brain`（Windows 1.0.3 與 1.1.0、macOS 1.0.7，皆已驗證、同一路徑）或 `~/.antigravity-cli/brain`（Linux 1.0.2，回報）。若 `--engine agy` 回報找不到 brain 根目錄，請先執行一次 `agy` 讓其建立該目錄，或開 issue 回報實際位置。
+> **AGY transcript recovery 已於 Windows 與 macOS 驗證通過；Linux 為回報可用。** Adapter 所支援的舊版 AGY 以 positional `agy --print` 執行時無 piped response（上游 [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466)，已於 macOS agy 1.0.7 重現），所以外掛從磁碟上的「brain」transcript 恢復回應——`~/.gemini/antigravity-cli/brain`（Windows 1.0.3／1.1.0／1.1.2 與 macOS 1.0.7，同一路徑）或 `~/.antigravity-cli/brain`（Linux 1.0.2，回報）。AGY 1.1.2 另已支援自動 print 的 stdin prompt 路徑，Windows 實測亦有 stdout，但外掛 v0.7.0 尚未切換，跨平台行為也尚未驗證。若找不到 brain 根目錄，請先執行一次 `agy` 建立目錄，或開 issue 回報實際位置。
 
 ---
 
 ## 安全性
 
-- **Stdin 傳遞（gemini 引擎）**：`gemini` 引擎之提示透過 stdin（Node.js `spawnSync` 的 `input` 選項）傳遞、從不插入 shell 命令字串，故無論內容為何皆無 shell injection 風險。`agy` 引擎無 stdin 模式，提示以 CLI 引數傳入；處理不可信輸入時請優先使用預設之 `gemini` 引擎。
+- **Stdin 傳遞（gemini 引擎）**：`gemini` 引擎之提示透過 stdin（Node.js `spawnSync` 的 `input` 選項）傳遞、從不插入 shell 命令字串，故無論內容為何皆無 shell injection 風險。外掛 v0.7.0 尚未採用 AGY 1.1.2 的 stdin 路徑；處理不可信輸入時請優先使用預設的 gemini 引擎。
 - **Windows `.cmd` wrapper**：npm 將 `gemini`／`agy` 安裝為 `.cmd` shim，需 `shell: true` 方能啟動。因 gemini 提示走 stdin（從不進 argv），`shell: true` 永不將其暴露給 `cmd.exe` 解析——argv 中僅有受控旗標（model id、`--yolo` 等）。
 - **DEP0190 警告屬無害**：於 Windows 上可能見到 `(node:NNN) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.`。此處**可安心忽略**——該 deprecation 針對的是在 `shell: true` 下把*提示內容*放入 argv，但本外掛的 gemini 引擎從不如此：提示走 stdin，僅受控旗標進入 argv（且各自驗證，如 model id 須符合 `^[A-Za-z0-9][A-Za-z0-9._-]*$`）。此警告是 Node 對該通用模式的提醒，並非本程式路徑中的實際注入點。
-- **AGY positional 提示**：AGY 無 stdin 模式，故 `--engine agy` 時提示以 positional CLI 引數傳入，於 Windows 受 `cmd.exe` 引號規則影響。**請勿將不可信提示內容經 `--engine agy` 傳遞**——應優先使用預設之 `gemini` 引擎。
+- **外掛 v0.7.0 的 AGY positional 提示**：雖然 AGY 1.1.2 已支援自動 print 的 stdin prompt 路徑，本版 adapter 仍以 positional CLI 引數傳入提示，並保留 24,000 字元安全上限。**本版請勿將不可信提示內容經 `--engine agy` 傳遞**——應優先使用預設的 gemini 引擎。Windows 路徑仍解析絕對 `.exe` 並使用 `shell:false`；剩餘風險是 prompt 暴露於 argv 與平台引號規則，而非經 npm shim 啟動 shell。
 - **憑證處理**：`~/.gemini/oauth_creds.json` 之 OAuth 憑證僅用於 `getGeminiLoginStatus()` 檢查 token 是否過期；本外掛從不記錄、複製或傳輸之。
 - **`.gitignore`**：`.omc/` 狀態目錄（工作日誌、會話狀態）已排除於版本控制之外。
 

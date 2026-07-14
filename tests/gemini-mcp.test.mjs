@@ -14,8 +14,11 @@ function toolRequest(name, args) {
 
 test("gemini MCP advertises its identity and five tools", async () => {
   const initialized = await handleRequest({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+  const pluginVersion = JSON.parse(
+    fs.readFileSync(new URL("../plugins/gemini/.claude-plugin/plugin.json", import.meta.url), "utf8")
+  ).version;
   assert.equal(initialized.serverInfo.name, "gemini");
-  assert.equal(initialized.serverInfo.version, "0.6.6");
+  assert.equal(initialized.serverInfo.version, pluginVersion);
 
   const listed = await handleRequest({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
   assert.deepEqual(listed.tools.map((tool) => tool.name), [
