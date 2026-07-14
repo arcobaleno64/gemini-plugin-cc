@@ -21,8 +21,8 @@ Compared with AGY-only, multi-host plugins, this project keeps the Gemini CLI pa
 - Pragmatic and adversarial code review over the current diff or branch.
 - Background task delegation for longer-running companion-agent work.
 - Gemini model aliases, graceful model fallback, and transient review retry.
-- AGY transcript recovery for `agy --print` non-pipe behavior.
-- Safer stdin prompt delivery on the Gemini engine.
+- Version-gated AGY prompt transport with transcript-authoritative recovery.
+- Safer stdin prompt delivery on Gemini and AGY 1.1.2 or newer.
 
 | Need | Use this plugin when... |
 |---|---|
@@ -42,7 +42,7 @@ Compared with AGY-only, multi-host plugins, this project keeps the Gemini CLI pa
 - **`/gemini:status`** — Inspect active and completed background jobs.
 - **`/gemini:result`** / **`/gemini:cancel`** — Retrieve or cancel a background job.
 - **Engine auto-detection** — Prefers `gemini` CLI (pipe-safe); falls back to `agy`.
-- **Stdin prompt delivery** — Prompts are passed via stdin on all platforms, eliminating shell injection and Windows `.cmd` wrapper issues.
+- **Version-aware stdin prompt delivery** — Gemini always uses stdin; AGY 1.1.2 or newer uses its auto-print stdin path, while older or unknown versions retain the compatible positional path.
 - **Session lifecycle hooks** — Automatically injects `GEMINI_COMPANION_SESSION_ID`; cleans up stale jobs on session end.
 
 ---
@@ -53,7 +53,7 @@ Compared with AGY-only, multi-host plugins, this project keeps the Gemini CLI pa
 |---|---|---|
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
 | Gemini CLI | ≥ 0.40 | `npm install -g @google/gemini-cli` |
-| AGY _(optional)_ | ≥ 1.0.3 (1.1.0 verified) | _(see install note below)_ |
+| AGY _(optional)_ | ≥ 1.0.3; ≥ 1.1.2 recommended (Windows verified) | _(see install note below)_ |
 | Claude Code | any | [claude.ai/code](https://claude.ai/code) |
 
 **Install AGY** (optional fallback): `curl -fsSL https://antigravity.google/cli/install.sh | bash`
@@ -83,15 +83,15 @@ Compared with AGY-only, multi-host plugins, this project keeps the Gemini CLI pa
 
 ### Pinned release (a specific published version)
 
-Pin the marketplace to a release tag — e.g. `v0.7.0`:
+Pin the marketplace to a release tag — e.g. `v0.7.1`:
 
 ```
-/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.7.0
+/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.7.1
 /plugin install gemini@gemini-plugin-cc
 /reload-plugins
 ```
 
-> Claude Code installs plugins from the git tree, not from GitHub Release tarballs — `@<tag>` selects the git tag behind a [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases). A pinned install does **not** auto-update; to move to a newer release, re-add the marketplace with the new tag (e.g. `…@v0.7.1`).
+> Claude Code installs plugins from the git tree, not from GitHub Release tarballs — `@<tag>` selects the git tag behind a [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases). A pinned install does **not** auto-update; to move to a newer release, re-add the marketplace with the new tag (e.g. `…@v0.7.2`).
 
 Then run `/gemini:setup` — it will check whether Gemini CLI is ready. If Gemini is missing and npm is available, it will offer to install it for you.
 
@@ -231,22 +231,22 @@ When enabled and the review returns `needs-attention`, Claude Code is blocked fr
 In `auto` mode the plugin selects the first available engine in this order:
 
 1. **`gemini` CLI** — outputs via stdout; supports stdin prompt delivery.
-2. **`agy`** — fallback; through plugin v0.7.0 the adapter still uses `agy --print <prompt>` and recovers the response from the on-disk transcript, so explicit `--engine agy` is required to use it.
+2. **`agy`** — fallback; AGY 1.1.2 or newer receives the prompt on stdin with no `--print` flag, while older or unknown versions retain `agy --print <prompt>`.
 
 Override via `--engine` flag or the `GEMINI_ENGINE` environment variable.
 
 > `--model` and `--effort` are managed by the **gemini** engine only. `--engine agy` currently leaves model choice to AGY's configured/default behavior; the plugin does not translate Gemini aliases or effort tiers to AGY arguments.
 
-> **AGY transcript recovery is platform-verified on Windows and macOS; Linux is reported working.** Positional `agy --print` produced no piped response on the older versions the adapter targets (upstream [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466); reproduced on macOS agy 1.0.7), so the plugin recovers AGY responses from the on-disk "brain" transcript under `~/.gemini/antigravity-cli/brain` (Windows 1.0.3/1.1.0/1.1.2 and macOS 1.0.7, same root) or `~/.antigravity-cli/brain` (Linux 1.0.2, reported). AGY 1.1.2 separately supports an auto-print stdin prompt path and returned stdout in a Windows probe, but plugin v0.7.0 has not switched to that path and cross-platform behavior is not yet verified. If `--engine agy` reports no brain root, run `agy` once so it creates the directory, or open an issue with its actual location.
+> **AGY transcript recovery remains authoritative.** Positional `agy --print` produced no piped response on older releases (upstream [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466); reproduced on macOS AGY 1.0.7). Plugin v0.7.1 uses the auto-print stdin path on AGY 1.1.2 or newer, but still takes the completed response, DONE status, thinking, and conversation ID from the on-disk transcript. Known brain roots are `~/.gemini/antigravity-cli/brain` (Windows/macOS) and `~/.antigravity-cli/brain` (Linux, reported). The 1.1.2 stdin path is live-verified on Windows and covered by a POSIX integration fixture; real macOS/Linux 1.1.2 verification remains pending. If no brain root is found, run `agy` once or open an issue with its actual location.
 
 ---
 
 ## Security
 
-- **Stdin delivery (gemini engine)**: For the `gemini` engine, prompts are passed via `stdin` (Node's `spawnSync` `input` option) and never interpolated into a shell string, eliminating shell-injection risk regardless of prompt content. Plugin v0.7.0 has not yet adopted AGY 1.1.2's stdin path, so prefer the default `gemini` engine for untrusted input.
-- **Windows `.cmd` wrappers**: npm installs `gemini`/`agy` as `.cmd` shims, which require `shell: true` to launch. Because the gemini prompt travels on stdin (never in argv), `shell: true` never exposes it to `cmd.exe` parsing — only controlled flags (model id, `--yolo`, …) are ever placed in argv.
+- **Stdin delivery**: Gemini prompts and AGY 1.1.2-or-newer prompts use Node's `spawnSync` `input` option and never enter argv. AGY versions older than 1.1.2, plus unparseable versions, keep the positional compatibility path and its 24,000-character limit; prefer Gemini or AGY 1.1.2+ for untrusted prompt content.
+- **Windows process boundary**: Gemini's npm `.cmd` shim is launched through `shell:true`, but its prompt remains on stdin and only validated flags enter argv. AGY must resolve to an absolute `.exe` and is always launched with `shell:false`.
 - **DEP0190 warning is benign**: On Windows you may see `(node:NNN) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.` This is **safe to ignore here** — the deprecation is about *prompt content* placed in argv under `shell: true`, but this plugin never does that for the gemini engine: the prompt travels on stdin, and only controlled flags reach argv (each validated, e.g. model ids must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`). The warning is Node flagging the general pattern, not an actual injection vector in this code path.
-- **AGY positional prompt in plugin v0.7.0**: Although AGY 1.1.2 supports an auto-print stdin prompt path, this adapter still passes the prompt as a positional CLI argument and therefore keeps its 24,000-character safety limit. **Do not route untrusted prompt content through `--engine agy`** in this version — prefer the default `gemini` engine. On Windows the plugin still resolves an absolute `.exe` and uses `shell:false`; the remaining concern is prompt exposure in argv and platform quoting, not shell invocation through an npm shim.
+- **AGY transport fallback**: Only a stable parsed version of 1.1.2 or newer enables stdin. Unknown and prerelease version strings fail closed to the existing positional path, preserving compatibility rather than assuming an upstream capability.
 - **Credential handling**: OAuth credentials in `~/.gemini/oauth_creds.json` are read only to check token expiry via `getGeminiLoginStatus()`; they are never logged, copied elsewhere, or transmitted by this plugin.
 - **`.gitignore`**: The `.omc/` state directory (job logs, session state) is excluded from version control.
 
@@ -275,10 +275,10 @@ Claude Code
   └─ /gemini:rescue "prompt"
        └─ gemini-companion.mjs task
             ├─ detectEngine()        → gemini | agy
-            ├─ buildCliArgs()        → args (no prompt in args for gemini)
-            ├─ runCommand()          → spawnSync, prompt via stdin
-            │    shell: true (Win)   ← fixes Windows .cmd wrapper
-            │    input: prompt       ← gemini engine: prompt via stdin (no shell parsing)
+            ├─ buildCliArgs()        → version-gated args
+            ├─ runCommand()          → spawnSync
+            │    input: prompt       ← gemini + AGY ≥1.1.2
+            │    argv: prompt        ← older/unknown AGY only (24K cap)
             └─ renderTaskResult()   → Markdown output to Claude
 ```
 

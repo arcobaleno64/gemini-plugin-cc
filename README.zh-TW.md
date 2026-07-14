@@ -19,8 +19,8 @@
 - 對目前 diff 或 branch 執行 pragmatic code review 與 adversarial review。
 - 用 background task delegation 處理較長時間的 companion-agent 工作。
 - Gemini model aliases、graceful model fallback 與 transient review retry。
-- 針對 `agy --print` non-pipe behavior 的 AGY transcript recovery。
-- Gemini engine 採用較安全的 stdin prompt delivery。
+- 具版本分流的 AGY prompt transport，並以 transcript recovery 為權威來源。
+- Gemini 與 AGY 1.1.2 以上採用較安全的 stdin prompt delivery。
 
 | 需求 | 適合使用本外掛的情境 |
 |---|---|
@@ -40,7 +40,7 @@
 - **`/gemini:status`** — 查看作用中與已完成的背景工作。
 - **`/gemini:result`** / **`/gemini:cancel`** — 取得或取消背景工作。
 - **引擎自動偵測** — 優先使用 `gemini` CLI（支援 pipe 輸出）；備援退回至 `agy`。
-- **Gemini stdin 提示傳遞** — gemini 引擎的提示透過 stdin 傳入，消除 Windows `.cmd` wrapper 問題與 shell injection 風險。
+- **版本感知的 stdin 提示傳遞** — Gemini 固定走 stdin；AGY 1.1.2 以上走自動 print 的 stdin 路徑，舊版或版本不明時保留 positional 相容路徑。
 - **會話生命週期掛鉤** — 自動注入 `GEMINI_COMPANION_SESSION_ID`；會話結束時清理殘留工作。
 
 ---
@@ -51,7 +51,7 @@
 |---|---|---|
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
 | Gemini CLI | ≥ 0.40 | `npm install -g @google/gemini-cli` |
-| AGY _(選用)_ | ≥ 1.0.3（1.1.0 已驗證） | _(安裝指令見下)_ |
+| AGY _(選用)_ | ≥ 1.0.3；建議 ≥ 1.1.2（Windows 已驗證） | _(安裝指令見下)_ |
 | Claude Code | 任意版本 | [claude.ai/code](https://claude.ai/code) |
 
 **安裝 AGY**（選用備援）：`curl -fsSL https://antigravity.google/cli/install.sh | bash`
@@ -81,15 +81,15 @@
 
 ### 釘選發布版（指定某個已發布版本）
 
-將 marketplace 釘到某個 release 標籤——例如 `v0.7.0`：
+將 marketplace 釘到某個 release 標籤——例如 `v0.7.1`：
 
 ```
-/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.7.0
+/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.7.1
 /plugin install gemini@gemini-plugin-cc
 /reload-plugins
 ```
 
-> Claude Code 從 git tree 安裝外掛，**並非**從 GitHub Releases 的 tarball——`@<tag>` 選的是 [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases) 背後的 git 標籤。釘版安裝**不會**自動更新；欲升至新版，請以新標籤重新加入 marketplace（例如 `…@v0.7.1`）。
+> Claude Code 從 git tree 安裝外掛，**並非**從 GitHub Releases 的 tarball——`@<tag>` 選的是 [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases) 背後的 git 標籤。釘版安裝**不會**自動更新；欲升至新版，請以新標籤重新加入 marketplace（例如 `…@v0.7.2`）。
 
 接著執行 `/gemini:setup`——若 Gemini CLI 尚未安裝且 npm 可用，指令會提供自動安裝選項。
 
@@ -229,22 +229,22 @@
 在 `auto` 模式下，外掛依以下優先順序選擇可用引擎：
 
 1. **`gemini` CLI** — 透過 stdout 輸出；支援 stdin 提示傳遞。
-2. **`agy`** — 備援引擎；截至外掛 v0.7.0，adapter 仍使用 `agy --print <prompt>` 並從磁碟 transcript 恢復回應，需明確使用 `--engine agy` 才能強制啟用。
+2. **`agy`** — 備援引擎；AGY 1.1.2 以上以 stdin 接收 prompt 且不帶 `--print`，舊版或版本不明時保留 `agy --print <prompt>`。
 
 可透過 `--engine` 旗標或 `GEMINI_ENGINE` 環境變數覆蓋。
 
 > `--model` 與 `--effort` 只由 **gemini** 引擎管理。`--engine agy` 目前讓 AGY 使用其 configured/default model；本外掛不會把 Gemini aliases 或 effort tiers 翻譯成 AGY 參數。
 
-> **AGY transcript recovery 已於 Windows 與 macOS 驗證通過；Linux 為回報可用。** Adapter 所支援的舊版 AGY 以 positional `agy --print` 執行時無 piped response（上游 [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466)，已於 macOS agy 1.0.7 重現），所以外掛從磁碟上的「brain」transcript 恢復回應——`~/.gemini/antigravity-cli/brain`（Windows 1.0.3／1.1.0／1.1.2 與 macOS 1.0.7，同一路徑）或 `~/.antigravity-cli/brain`（Linux 1.0.2，回報）。AGY 1.1.2 另已支援自動 print 的 stdin prompt 路徑，Windows 實測亦有 stdout，但外掛 v0.7.0 尚未切換，跨平台行為也尚未驗證。若找不到 brain 根目錄，請先執行一次 `agy` 建立目錄，或開 issue 回報實際位置。
+> **AGY transcript recovery 仍是權威來源。** 舊版 positional `agy --print` 沒有 piped response（上游 [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466)，已於 macOS AGY 1.0.7 重現）。外掛 v0.7.1 對 AGY 1.1.2 以上改走自動 print 的 stdin 路徑，但完成回應、DONE 狀態、thinking 與 conversation ID 仍取自磁碟 transcript。已知 brain root 為 `~/.gemini/antigravity-cli/brain`（Windows／macOS）及 `~/.antigravity-cli/brain`（Linux，回報）。1.1.2 stdin 路徑已於 Windows live 驗證並有 POSIX integration fixture；macOS／Linux 真實 1.1.2 尚待驗證。若找不到 brain root，請先執行一次 `agy` 或開 issue 回報實際位置。
 
 ---
 
 ## 安全性
 
-- **Stdin 傳遞（gemini 引擎）**：`gemini` 引擎之提示透過 stdin（Node.js `spawnSync` 的 `input` 選項）傳遞、從不插入 shell 命令字串，故無論內容為何皆無 shell injection 風險。外掛 v0.7.0 尚未採用 AGY 1.1.2 的 stdin 路徑；處理不可信輸入時請優先使用預設的 gemini 引擎。
-- **Windows `.cmd` wrapper**：npm 將 `gemini`／`agy` 安裝為 `.cmd` shim，需 `shell: true` 方能啟動。因 gemini 提示走 stdin（從不進 argv），`shell: true` 永不將其暴露給 `cmd.exe` 解析——argv 中僅有受控旗標（model id、`--yolo` 等）。
+- **Stdin 傳遞**：Gemini prompt 與 AGY 1.1.2 以上 prompt 透過 Node.js `spawnSync` 的 `input` 傳遞，不進入 argv。AGY 1.1.2 以下或版本無法解析時保留 positional 相容路徑與 24,000 字元上限；處理不可信內容時請使用 Gemini 或 AGY 1.1.2 以上。
+- **Windows process 邊界**：Gemini 的 npm `.cmd` shim 以 `shell:true` 啟動，但 prompt 留在 stdin，argv 只有已驗證旗標。AGY 必須解析成絕對 `.exe`，並固定以 `shell:false` 啟動。
 - **DEP0190 警告屬無害**：於 Windows 上可能見到 `(node:NNN) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.`。此處**可安心忽略**——該 deprecation 針對的是在 `shell: true` 下把*提示內容*放入 argv，但本外掛的 gemini 引擎從不如此：提示走 stdin，僅受控旗標進入 argv（且各自驗證，如 model id 須符合 `^[A-Za-z0-9][A-Za-z0-9._-]*$`）。此警告是 Node 對該通用模式的提醒，並非本程式路徑中的實際注入點。
-- **外掛 v0.7.0 的 AGY positional 提示**：雖然 AGY 1.1.2 已支援自動 print 的 stdin prompt 路徑，本版 adapter 仍以 positional CLI 引數傳入提示，並保留 24,000 字元安全上限。**本版請勿將不可信提示內容經 `--engine agy` 傳遞**——應優先使用預設的 gemini 引擎。Windows 路徑仍解析絕對 `.exe` 並使用 `shell:false`；剩餘風險是 prompt 暴露於 argv 與平台引號規則，而非經 npm shim 啟動 shell。
+- **AGY transport 回退**：只有可穩定解析為 1.1.2 以上的版本才啟用 stdin；未知版與 prerelease 字串一律 fail closed 至既有 positional 路徑，不假設上游能力。
 - **憑證處理**：`~/.gemini/oauth_creds.json` 之 OAuth 憑證僅用於 `getGeminiLoginStatus()` 檢查 token 是否過期；本外掛從不記錄、複製或傳輸之。
 - **`.gitignore`**：`.omc/` 狀態目錄（工作日誌、會話狀態）已排除於版本控制之外。
 
@@ -273,10 +273,10 @@ Claude Code
   └─ /gemini:rescue "提示"
        └─ gemini-companion.mjs task
             ├─ detectEngine()        → gemini | agy
-            ├─ buildCliArgs()        → 引數（gemini 模式不含提示）
-            ├─ runCommand()          → spawnSync，提示透過 stdin 傳入
-            │    shell: true (Win)   ← 修復 Windows .cmd wrapper 問題
-            │    input: prompt       ← gemini 引擎：提示經 stdin（不經 shell 解析）
+            ├─ buildCliArgs()        → 依版本組合引數
+            ├─ runCommand()          → spawnSync
+            │    input: prompt       ← Gemini + AGY ≥1.1.2
+            │    argv: prompt        ← 舊版／未知版 AGY（24K 上限）
             └─ renderTaskResult()   → Markdown 輸出至 Claude
 ```
 

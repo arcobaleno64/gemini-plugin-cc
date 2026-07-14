@@ -6,8 +6,9 @@ import process from "node:process";
 // state, and backslashes escape quotes for MSVCRT children, not for cmd.exe.
 // Keep it only as a belt-and-suspenders safety net for the fixed-constant argv
 // used by remaining bare-name command paths (git/where/gemini/taskkill), never
-// as protection for free text. Gemini prompts use stdin; agy's free-text prompt
-// is protected by absolute-path resolution and therefore shell:false instead.
+// as protection for free text. Gemini and AGY >=1.1.2 prompts use stdin; older
+// AGY positional prompts are protected by absolute-path resolution and
+// therefore shell:false instead.
 const WINDOWS_SHELL_UNSAFE = /[\s|<>&()^"]/;
 function quoteForWindowsShell(arg) {
   if (typeof arg !== "string" || !WINDOWS_SHELL_UNSAFE.test(arg)) return arg;

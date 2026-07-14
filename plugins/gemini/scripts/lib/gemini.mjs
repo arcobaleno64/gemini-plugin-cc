@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 
-import { buildCliArgs, detectEngine, mapEffortToModel, normalizeRequestedModel } from "./engine.mjs";
+import { buildCliArgs, detectEngine, mapEffortToModel, normalizeRequestedModel, supportsAgyStdinPrompt } from "./engine.mjs";
 import { classifyCliFailure } from "./failures.mjs";
 import { binaryAvailable, runCommand } from "./process.mjs";
 import { resolveAgyBrainRoot, listConvDirs, recoverAgyResponse } from "./agy-transcript.mjs";
@@ -149,15 +149,17 @@ export async function runGeminiTurn(cwd, options = {}) {
     model = normalizeRequestedModel(model) ?? model;
   }
 
-  // Gemini CLI reads from stdin to avoid shell injection on Windows (shell:true + args array)
-  const useStdin = engineInfo.engine === "gemini";
+  // Gemini always uses stdin. AGY auto-enters print mode from stdin starting at
+  // 1.1.2; unknown/older versions keep the positional compatibility path.
+  const useStdin = engineInfo.engine === "gemini"
+    || (engineInfo.engine === "agy" && supportsAgyStdinPrompt(engineInfo.version));
   const useJson = engineInfo.engine === "gemini";
   const spawnTimeoutMs = engineInfo.engine === "agy" ? AGY_SPAWN_TIMEOUT_MS : DEFAULT_SPAWN_TIMEOUT_MS;
 
-  // agy only (#27466): the response never reaches stdout — we recover it from the
-  // transcript agy writes on disk. Snapshot the conversation dirs BEFORE the spawn
-  // so we can identify the new one afterwards (agy does not surface the conversation
-  // id on stdout — antigravity-cli#7). TODO-3 timeout grace: give agy's own
+  // AGY recovery remains transcript-authoritative across both transport paths.
+  // Snapshot conversation dirs BEFORE the spawn so we can identify the new one
+  // afterwards (agy does not surface the conversation id reliably on stdout).
+  // Give agy's own
   // --print-timeout a shorter window than the hard spawn kill so agy self-terminates
   // and flushes a final status="DONE" transcript row before spawnSync SIGKILLs it.
   let agyBrainRoot = null;
@@ -221,8 +223,8 @@ export async function runGeminiTurn(cwd, options = {}) {
   let recoveryFailure = null;
 
   if (engineInfo.engine === "agy") {
-    // agy wrote the response to its transcript, not stdout (#27466). Recover it
-    // by diffing the conversation dirs captured before/after the spawn.
+    // Recover the authoritative response and conversation id by diffing the
+    // transcript directories captured before/after the spawn.
     const rec = recoverAgyResponse(agyBrainRoot, agyBefore);
     if (!rec.response) {
       if (exitCode === 0) exitCode = 1;
@@ -311,11 +313,12 @@ export async function runGeminiReview(cwd, options = {}) {
 
   const model = normalizeRequestedModel(requestedModel) ?? (engineInfo.engine === "gemini" ? "gemini-2.5-flash" : null);
 
-  const useStdin = engineInfo.engine === "gemini";
+  const useStdin = engineInfo.engine === "gemini"
+    || (engineInfo.engine === "agy" && supportsAgyStdinPrompt(engineInfo.version));
   const spawnTimeoutMs = engineInfo.engine === "agy" ? AGY_SPAWN_TIMEOUT_MS : DEFAULT_SPAWN_TIMEOUT_MS;
 
-  // agy only (#27466): recover the review from the transcript, not stdout (see
-  // runGeminiTurn for the rationale). Snapshot the conversation dirs before the
+  // Recover AGY review output from the authoritative transcript on both the old
+  // positional and 1.1.2+ stdin paths. Snapshot conversation dirs before the
   // spawn, and give agy's --print-timeout a grace window shorter than the hard
   // spawn kill so it flushes a final status="DONE" row before SIGKILL.
   let agyBrainRoot = null;
@@ -379,8 +382,7 @@ export async function runGeminiReview(cwd, options = {}) {
   let recoveryFailure = null;
 
   if (engineInfo.engine === "agy") {
-    // agy wrote the review to its transcript, not stdout (#27466). Recover it and
-    // parse the JSON findings out of the recovered text.
+    // Recover the authoritative review and parse JSON findings from that text.
     const rec = recoverAgyResponse(agyBrainRoot, agyBefore);
     if (!rec.response) {
       if (exitCode === 0) exitCode = 1;

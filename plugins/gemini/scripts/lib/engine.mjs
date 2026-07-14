@@ -54,6 +54,15 @@ function resolveAgyExecutablePath({ resolveBinaryPathImpl = resolveBinaryPath } 
   return resolved;
 }
 
+export function supportsAgyStdinPrompt(version) {
+  const match = String(version ?? "").trim().match(/(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?/);
+  if (!match || match[4]) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  return major > 1 || (major === 1 && (minor > 1 || (minor === 1 && patch >= 2)));
+}
+
 export function detectEngine(requestedEngine = null, options = {}) {
   const envEngine = process.env[ENGINE_ENV];
   const target = requestedEngine ?? envEngine ?? "auto";
@@ -67,14 +76,12 @@ export function detectEngine(requestedEngine = null, options = {}) {
     const binary = resolveAgyExecutablePath(options);
     const status = binaryAvailable(binary, ["--version"]);
     if (!status.available) throw new Error("AGY engine requested but agy binary is not available.");
-    // `agy --print` does not emit its response over a pipe in non-TTY use
-    // (upstream bug google-gemini/gemini-cli#27466); the plugin recovers the
-    // response from agy's on-disk transcript instead (see agy-transcript.mjs and
-    // runGeminiTurn). If no transcript brain dir exists on this platform there is
-    // nothing to recover from, so fail loud rather than spawn empty-handed.
+    // AGY 1.1.2 can accept a piped prompt and return stdout, but transcript
+    // recovery remains authoritative for the response, DONE status, and
+    // conversation id. Fail loud when that required recovery source is absent.
     if (!resolveAgyBrainRoot()) {
       throw new Error(
-        "AGY engine requested but `agy --print` cannot return output over a pipe (upstream bug google-gemini/gemini-cli#27466) and no transcript brain dir was found to recover from on this platform. Run `agy` once interactively to initialize it, or use `--engine gemini`."
+        "AGY engine requested but no transcript brain dir was found. The plugin requires AGY's on-disk transcript for the completed response and conversation id, including on AGY 1.1.2's stdin prompt path. Run `agy` once interactively to initialize it, or use `--engine gemini`."
       );
     }
     return { engine: "agy", binary, version: status.detail ?? "unknown" };
@@ -86,13 +93,9 @@ export function detectEngine(requestedEngine = null, options = {}) {
     return { engine: "gemini", binary: "gemini", version: status.detail ?? "unknown" };
   }
 
-  // auto: prefer gemini. AGY exposes a `--print` flag, but its response does not
-  // come through a pipe in non-interactive (non-TTY) use — local verification on
-  // agy 1.0.3 (2026-06) had `agy --print` return empty stdout or hang to its
-  // print-timeout under the exact piped spawn this plugin uses, while
-  // `gemini -p --output-format json` piped a clean JSON envelope every time.
-  // gemini is therefore the only engine reliable for this spawn model; AGY stays
-  // a last resort when gemini is entirely absent.
+  // auto: prefer gemini because it has the plugin's JSON/model contract. AGY
+  // remains a fallback even though 1.1.2 adds stdin prompt delivery; its response
+  // and conversation id still depend on transcript recovery in this adapter.
   const geminiStatus = binaryAvailable("gemini", ["--version"]);
   if (geminiStatus.available) {
     return { engine: "gemini", binary: "gemini", version: geminiStatus.detail ?? "unknown" };
@@ -137,9 +140,14 @@ export function buildCliArgs(engine, options = {}) {
   const { prompt = "", model, write = false, resumeLast = false, outputJson = false, approvalModePlan = false, timeoutMs, useStdin = false } = options;
 
   if (engine === "agy") {
-    // AGY does not support stdin; prompt must be passed as a positional argument
-    assertAgyPromptSafe(prompt);
-    const args = ["--print", prompt];
+    // AGY >=1.1.2 auto-enters print mode when a prompt is piped on stdin; adding
+    // --print would consume the following flag as its own prompt argument. Older
+    // versions retain the positional form and its Windows argv safety checks.
+    const args = [];
+    if (!useStdin) {
+      assertAgyPromptSafe(prompt);
+      args.push("--print", prompt);
+    }
     if (write) args.push("--dangerously-skip-permissions");
     if (resumeLast) {
       args.push("--continue");

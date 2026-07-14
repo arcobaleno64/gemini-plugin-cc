@@ -91,14 +91,46 @@ export function installFakeAgy(binDir) {
   }
 }
 
+// POSIX integration fixture for AGY transport tests. It records argv/stdin,
+// emits a decoy stdout response, and writes a completed transcript so tests can
+// prove that transport changes do not weaken transcript-authoritative recovery.
+export function installCapturingAgyExecutable(binDir, { version = "1.1.2" } = {}) {
+  if (process.platform === "win32") {
+    throw new Error("The capturing AGY fixture uses a POSIX shebang; Windows is covered by live AGY smoke tests.");
+  }
+
+  const source = [
+    "#!/usr/bin/env node",
+    'const fs = require("node:fs");',
+    'const path = require("node:path");',
+    `const version = ${JSON.stringify(version)};`,
+    "const args = process.argv.slice(2);",
+    'if (args.length === 1 && args[0] === "--version") { process.stdout.write(version + "\\n"); process.exit(0); }',
+    'const stdin = fs.readFileSync(0, "utf8");',
+    "const capturePath = process.env.FAKE_AGY_CAPTURE;",
+    'if (!capturePath) { process.stderr.write("FAKE_AGY_CAPTURE is required\\n"); process.exit(2); }',
+    "fs.mkdirSync(path.dirname(capturePath), { recursive: true });",
+    'fs.writeFileSync(capturePath, JSON.stringify({ args, stdin }, null, 2) + "\\n", "utf8");',
+    'const home = process.env.HOME || process.env.USERPROFILE || ".";',
+    'const conv = "fake-" + Date.now() + "-" + process.pid;',
+    'const logDir = path.join(home, ".gemini", "antigravity-cli", "brain", conv, ".system_generated", "logs");',
+    "fs.mkdirSync(logDir, { recursive: true });",
+    'const row = { step_index: 1, source: "MODEL", type: "PLANNER_RESPONSE", status: "DONE", content: process.env.FAKE_AGY_RESPONSE || "FAKE_AGY_TRANSCRIPT_OK", thinking: "fixture reasoning" };',
+    'fs.writeFileSync(path.join(logDir, "transcript_full.jsonl"), JSON.stringify(row) + "\\n", "utf8");',
+    'process.stdout.write(process.env.FAKE_AGY_STDOUT || "FAKE_AGY_STDOUT_DECOY\\n");'
+  ].join("\n");
+
+  writeExecutable(path.join(binDir, "agy"), source);
+}
+
 // Install an executable AGY stand-in that passes the --version probe, then
 // fails the real print invocation without creating a transcript. Windows AGY
 // must resolve to an absolute .exe, so a copied Node executable provides a
-// safe, deterministic non-zero `bad option: --print` response there.
+// safe, deterministic non-zero unknown-option response there.
 export function installFailingAgyExecutable(binDir) {
   if (process.platform === "win32") {
     fs.copyFileSync(process.execPath, path.join(binDir, "agy.exe"));
-    return /bad option: --print/i;
+    return /bad option: --print-timeout/i;
   }
 
   writeExecutable(
