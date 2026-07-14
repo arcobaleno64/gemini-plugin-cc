@@ -44,6 +44,7 @@ campaign matrix for the full three-way comparison.
 ## Upstream-blocked
 
 - **gemini engine end-to-end** depends on Gemini API auth; the CLI OAuth path is
-  disabled upstream (observed `API_KEY_INVALID`, 2026-07-13). The plugin
-  prefers the gemini engine (stdin, pipe-safe) when credentials work and falls
-  back to agy transcript recovery otherwise.
+  retired upstream and will not be restored (owner-confirmed 2026-07-14;
+  observed `API_KEY_INVALID`). With the gemini engine effectively unavailable,
+  the plugin's agy path (transcript recovery) is the practical route; the gemini
+  path remains for environments where a working key exists.
