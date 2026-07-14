@@ -1,13 +1,13 @@
-// agy-transcript.mjs — P0-E: recover agy --print responses from disk.
+// agy-transcript.mjs — recover authoritative AGY responses from disk.
 //
 // WHY THIS EXISTS
 // ---------------
-// `agy --print` does NOT deliver its response over stdout in non-TTY use
-// (upstream bug google-gemini/gemini-cli#27466; locally verified empty/hang on
-// agy 1.0.3 Windows and reproduced on 1.0.7 macOS — 0 bytes piped to stdout).
-// The response IS persisted to disk under the agy "brain" dir. We
-// recover it by diffing the set of conversation dirs before/after the spawn and
-// reading the new one's transcript.
+// Older positional `agy --print` releases did not deliver their response over
+// stdout in non-TTY use (google-gemini/gemini-cli#27466; verified on AGY 1.0.3
+// Windows and 1.0.7 macOS). AGY 1.1.2 can accept the prompt on stdin and return
+// stdout, but the transcript still supplies the cross-version response, DONE
+// status, thinking, and conversation id. The adapter therefore keeps transcript
+// recovery authoritative on both transport paths.
 //
 // SYNCHRONOUS MODEL (important)
 // -----------------------------
@@ -207,47 +207,7 @@ export function recoverAgyResponse(brainRoot, beforeSnapshot) {
   };
 }
 
-/* ============================================================================
- * INTEGRATION INTO runGeminiTurn (gemini.mjs) — NOW INTEGRATED (see gemini.mjs).
- * Kept below as a reference for the wiring; the live code is the source of truth.
- * ============================================================================
- * The agy branch currently reads result.stdout (always empty). Replace the
- * RESULT-EXTRACTION step for agy only; buildCliArgs stays as-is (we still spawn
- * `agy --print` to make agy run and write the transcript).
- *
- * import { resolveAgyBrainRoot, listConvDirs, recoverAgyResponse } from "./agy-transcript.mjs";
- *
- * // --- before spawn (agy only) ---
- * let agyBrainRoot = null, agyBefore = null;
- * if (engineInfo.engine === "agy") {
- *   agyBrainRoot = resolveAgyBrainRoot();
- *   agyBefore = listConvDirs(agyBrainRoot);
- * }
- *
- * // --- TODO-3: timeout grace ---
- * // Give agy's own --print-timeout LESS time than the spawn timeout so agy
- * // self-terminates and flushes the transcript before spawnSync SIGKILLs it.
- * // Currently both are AGY_SPAWN_TIMEOUT_MS (same value) => they race and the
- * // final PLANNER_RESPONSE may be truncated. Suggested:
- * //   const printTimeoutMs = Math.max(30_000, AGY_SPAWN_TIMEOUT_MS - 15_000);
- * //   buildCliArgs(..., { timeoutMs: printTimeoutMs })   // feeds --print-timeout
- * //   runCommand(..., { timeout: AGY_SPAWN_TIMEOUT_MS }) // hard kill is the grace-later one
- *
- * const result = runCommand(engineInfo.binary, args, { cwd, maxBuffer: MAX_BUFFER, timeout: spawnTimeoutMs });
- *
- * // --- after spawn: branch result extraction ---
- * let responseText;
- * if (engineInfo.engine === "agy") {
- *   const rec = recoverAgyResponse(agyBrainRoot, agyBefore);
- *   if (!rec.response) {
- *     throw new Error(`AGY produced no recoverable response (${rec.reason}). agy --print does not pipe output (#27466); transcript recovery failed.`);
- *   }
- *   if (!rec.confident) {
- *     process.stderr.write(`[gemini-companion] Warning: AGY transcript match not certain (${rec.reason}). Verify the response corresponds to this run.\n`);
- *   }
- *   responseText = rec.response;
- * } else {
- *   const rawStdout = stripAnsi(result.stdout ?? "");
- *   // ... existing gemini JSON-envelope path ...
- * }
- * ============================================================================ */
+// Integration invariant: gemini.mjs snapshots the brain directory before every
+// AGY spawn and calls recoverAgyResponse afterwards. Missing recovery is passed
+// to the failure classifier together with exit status and stderr; a completed
+// transcript remains authoritative even when AGY also returned stdout.

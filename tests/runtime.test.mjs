@@ -9,6 +9,7 @@ import {
   buildEnv,
   buildFailingAgyEnv,
   buildEnvUnavailable,
+  installCapturingAgyExecutable,
   installFakeAgy,
   installFakeGemini,
   installFailingAgyExecutable,
@@ -659,6 +660,85 @@ test("task rejects an unknown engine", () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Unknown engine/i);
+});
+
+test("AGY 1.1.2 task sends a long prompt only on stdin and keeps transcript authoritative", { skip: process.platform === "win32" }, () => {
+  const repo = makeTempDir();
+  const binDir = makeTempDir();
+  const capturePath = path.join(binDir, "agy-capture.json");
+  const marker = `AGY112_STDIN_${"x".repeat(24_001)}`;
+  installCapturingAgyExecutable(binDir, { version: "1.1.2" });
+  initGitRepo(repo);
+  commit(repo, "README.md", "hello\n");
+
+  const result = run("node", [SCRIPT, "task", "--engine", "agy", marker], {
+    cwd: repo,
+    env: {
+      ...buildFailingAgyEnv(binDir),
+      FAKE_AGY_CAPTURE: capturePath,
+      FAKE_AGY_RESPONSE: "AGY112_TRANSCRIPT_OK",
+      FAKE_AGY_STDOUT: "AGY112_STDOUT_DECOY\n"
+    }
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /AGY112_TRANSCRIPT_OK/);
+  assert.doesNotMatch(result.stdout, /AGY112_STDOUT_DECOY/);
+  const capture = JSON.parse(fs.readFileSync(capturePath, "utf8"));
+  assert.equal(capture.stdin, marker);
+  assert.ok(!capture.args.includes("--print"));
+  assert.ok(!capture.args.includes(marker));
+  assert.deepEqual(capture.args.slice(-2), ["--print-timeout", "2m"]);
+});
+
+test("AGY 1.1.1 task retains positional prompt compatibility", { skip: process.platform === "win32" }, () => {
+  const repo = makeTempDir();
+  const binDir = makeTempDir();
+  const capturePath = path.join(binDir, "agy-capture.json");
+  const prompt = "AGY111_POSITIONAL_MARKER";
+  installCapturingAgyExecutable(binDir, { version: "1.1.1" });
+  initGitRepo(repo);
+  commit(repo, "README.md", "hello\n");
+
+  const result = run("node", [SCRIPT, "task", "--engine", "agy", prompt], {
+    cwd: repo,
+    env: {
+      ...buildFailingAgyEnv(binDir),
+      FAKE_AGY_CAPTURE: capturePath,
+      FAKE_AGY_RESPONSE: "AGY111_TRANSCRIPT_OK"
+    }
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /AGY111_TRANSCRIPT_OK/);
+  const capture = JSON.parse(fs.readFileSync(capturePath, "utf8"));
+  assert.equal(capture.stdin, "");
+  assert.deepEqual(capture.args.slice(0, 2), ["--print", prompt]);
+});
+
+test("AGY 1.1.2 review sends the generated review prompt on stdin", { skip: process.platform === "win32" }, () => {
+  const repo = makeTempDir();
+  const binDir = makeTempDir();
+  const capturePath = path.join(binDir, "agy-capture.json");
+  installCapturingAgyExecutable(binDir, { version: "1.1.2" });
+  initGitRepo(repo);
+  commit(repo, "src/app.js", "export const value = 1;\n");
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = 2;\n", "utf8");
+
+  const result = run("node", [SCRIPT, "review", "--engine", "agy", "--scope", "working-tree"], {
+    cwd: repo,
+    env: {
+      ...buildFailingAgyEnv(binDir),
+      FAKE_AGY_CAPTURE: capturePath,
+      FAKE_AGY_RESPONSE: JSON.stringify({ verdict: "clean", summary: "AGY stdin review completed.", findings: [] })
+    }
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /AGY stdin review completed/);
+  const capture = JSON.parse(fs.readFileSync(capturePath, "utf8"));
+  assert.match(capture.stdin, /export const value = 2/);
+  assert.ok(!capture.args.includes("--print"));
 });
 
 test("task preserves AGY stderr when no transcript response is recoverable", () => {

@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { MODEL_ALIASES, normalizeRequestedModel, mapEffortToModel, buildCliArgs, detectEngine } from "../plugins/gemini/scripts/lib/engine.mjs";
+import {
+  MODEL_ALIASES,
+  normalizeRequestedModel,
+  mapEffortToModel,
+  buildCliArgs,
+  detectEngine,
+  supportsAgyStdinPrompt
+} from "../plugins/gemini/scripts/lib/engine.mjs";
 
 // These two IDs return 404 ModelNotFound on the gemini CLI (verified 0.44.1).
 // No alias or effort tier may resolve to them.
@@ -62,6 +69,16 @@ test("detectEngine fails closed when agy resolves only to an absolute .cmd shim 
   );
 });
 
+test("AGY stdin prompt capability begins at stable 1.1.2 and fails closed for unknown versions", () => {
+  assert.equal(supportsAgyStdinPrompt("1.1.1"), false);
+  assert.equal(supportsAgyStdinPrompt("agy 1.1.1"), false);
+  assert.equal(supportsAgyStdinPrompt("1.1.2-beta.1"), false);
+  assert.equal(supportsAgyStdinPrompt("unknown"), false);
+  assert.equal(supportsAgyStdinPrompt("1.1.2"), true);
+  assert.equal(supportsAgyStdinPrompt("agy version 1.2.0"), true);
+  assert.equal(supportsAgyStdinPrompt("2.0.0"), true);
+});
+
 test("agy positional prompt rejects NUL bytes before argv construction", () => {
   assert.throws(
     () => buildCliArgs("agy", { prompt: "hello\0world" }),
@@ -74,6 +91,22 @@ test("agy positional prompt rejects prompts above the safe Windows argv limit", 
     () => buildCliArgs("agy", { prompt: "x".repeat(24_001) }),
     (error) => error.failure?.category === "prompt-too-long" && /24,000|24000/.test(error.message)
   );
+});
+
+test("AGY stdin mode omits --print and prompt while preserving execution flags", () => {
+  const prompt = "x".repeat(24_001);
+  const args = buildCliArgs("agy", {
+    prompt,
+    useStdin: true,
+    write: true,
+    timeoutMs: 105_000
+  });
+
+  assert.ok(!args.includes("--print"));
+  assert.ok(!args.includes(prompt));
+  assert.ok(args.includes("--dangerously-skip-permissions"));
+  assert.ok(args.includes("--new-project"));
+  assert.deepEqual(args.slice(-2), ["--print-timeout", "2m"]);
 });
 
 test("agy write turn adds --new-project so files land in cwd, not agy's scratch dir", () => {

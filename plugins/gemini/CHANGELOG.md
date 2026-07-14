@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.1 — 2026-07-14 — AGY stdin transport
+
+### Changed
+- **AGY 1.1.2 and newer now receive prompts on stdin.** The adapter parses `agy --version` and, only for a stable version at or above 1.1.2, omits both `--print` and the prompt from argv so AGY auto-enters print mode from piped input. Older, prerelease, and unparseable versions fail closed to the existing `agy --print <prompt>` path. The 24,000-character and NUL preflight checks now apply only to that positional fallback. Windows still requires an absolute `.exe` and `shell:false`; `--print-timeout`, `--continue`, `--new-project`, and `--dangerously-skip-permissions` behavior is unchanged. (`lib/engine.mjs`, `lib/gemini.mjs`)
+- **Transcript recovery remains authoritative.** Both task and review still snapshot the AGY brain directory and use the completed transcript for response text, DONE status, thinking, and conversation ID. Stdout is retained for diagnostics but does not replace the transcript contract, and the 105-second print / 120-second hard timeout strategy remains unchanged. (`lib/agy-transcript.mjs`)
+
+### Tests
+- Added version-boundary and argv tests for AGY 1.1.1 versus 1.1.2, including a prompt above the old 24,000-character positional limit. A POSIX fake AGY executable records argv/stdin, emits a conflicting stdout decoy, and writes a DONE transcript to cover task, review, legacy fallback, and transcript precedence. Existing task/review stderr-without-transcript regressions remain in place; Windows is covered by the AGY 1.1.2 live smoke described below.
+
+### Validation
+- **AGY 1.1.2 on Windows:** a foreground read-only task completed in 14 seconds and a background task in 13 seconds; both returned their unique marker, no touched files, and a conversation ID that matched a completed on-disk transcript. A one-line synthetic working-tree review completed in 26 seconds, returned structured JSON, and identified the planted wrong-operator defect. A direct invalid-model invocation used stdin with no `--print`, exited 1 in 1.7 seconds, wrote no stdout, and returned a non-empty stderr error plus the available-model list. A larger 53 KB review prompt reached a new transcript but produced no planner response before the existing 105-second print / 120-second hard timeout, which surfaced as `transcript-missing`; this confirms the transport while retaining the documented review-size/time boundary. Real credentials were not revoked, so the upstream OAuth fail-fast path remains documentation-backed rather than live-tested.
+
 ## 0.7.0 — 2026-07-14 — MCP bridge and AGY resilience
 
 ### Added
