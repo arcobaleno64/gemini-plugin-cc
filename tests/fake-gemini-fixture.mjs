@@ -91,6 +91,37 @@ export function installFakeAgy(binDir) {
   }
 }
 
+// Install an executable AGY stand-in that passes the --version probe, then
+// fails the real print invocation without creating a transcript. Windows AGY
+// must resolve to an absolute .exe, so a copied Node executable provides a
+// safe, deterministic non-zero `bad option: --print` response there.
+export function installFailingAgyExecutable(binDir) {
+  if (process.platform === "win32") {
+    fs.copyFileSync(process.execPath, path.join(binDir, "agy.exe"));
+    return /bad option: --print/i;
+  }
+
+  writeExecutable(
+    path.join(binDir, "agy"),
+    "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'agy 1.1.2'; exit 0; fi\necho 'AGY fixture failed server-side' >&2\nexit 23\n"
+  );
+  return /AGY fixture failed server-side/i;
+}
+
+export function buildFailingAgyEnv(binDir) {
+  const sep = process.platform === "win32" ? ";" : ":";
+  const home = path.join(binDir, "agy-home");
+  fs.mkdirSync(path.join(home, ".gemini", "antigravity-cli", "brain"), { recursive: true });
+  return {
+    ...process.env,
+    PATH: `${binDir}${sep}${process.env.PATH}`,
+    HOME: home,
+    USERPROFILE: home,
+    GEMINI_ENGINE: "agy",
+    GEMINI_HOME: path.join(home, ".gemini")
+  };
+}
+
 // Shadow only gemini with a wrapper that fails its --version probe, leaving any
 // installed agy untouched. Pair with installFakeAgy for AGY-fallback assertions.
 export function installUnavailableGemini(binDir) {

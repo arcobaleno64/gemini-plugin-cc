@@ -7,9 +7,11 @@ import { fileURLToPath } from "node:url";
 
 import {
   buildEnv,
+  buildFailingAgyEnv,
   buildEnvUnavailable,
   installFakeAgy,
   installFakeGemini,
+  installFailingAgyExecutable,
   installUnavailableAgy,
   installUnavailableEngines,
   installUnavailableGemini,
@@ -30,6 +32,7 @@ import {
   buildReviewPrompt,
   dispatchAdversarialReview
 } from "../plugins/gemini/scripts/gemini-companion.mjs";
+import { classifyCliFailure } from "../plugins/gemini/scripts/lib/failures.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SCRIPT = path.join(ROOT, "plugins", "gemini", "scripts", "gemini-companion.mjs");
@@ -656,6 +659,58 @@ test("task rejects an unknown engine", () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Unknown engine/i);
+});
+
+test("task preserves AGY stderr when no transcript response is recoverable", () => {
+  const repo = makeTempDir();
+  const binDir = makeTempDir();
+  const expectedStderr = installFailingAgyExecutable(binDir);
+  initGitRepo(repo);
+  commit(repo, "README.md", "hello\n");
+
+  const result = run("node", [SCRIPT, "task", "--engine", "agy", "do something"], {
+    cwd: repo,
+    env: buildFailingAgyEnv(binDir)
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}${result.stderr}`, expectedStderr);
+
+  const state = JSON.parse(fs.readFileSync(path.join(resolveStateDir(repo), "state.json"), "utf8"));
+  assert.equal(state.jobs[0].status, "failed");
+  assert.equal(state.jobs[0].failure.category, "transcript-missing");
+});
+
+test("AGY failure classification prefers actionable stderr over transcript recovery failure", () => {
+  const failure = classifyCliFailure({
+    engine: "agy",
+    status: 1,
+    stderr: "authentication failed or timed out",
+    transcriptReason: "no new conversation dir appeared"
+  });
+
+  assert.equal(failure.category, "auth");
+});
+
+test("review preserves AGY stderr when no transcript response is recoverable", () => {
+  const repo = makeTempDir();
+  const binDir = makeTempDir();
+  const expectedStderr = installFailingAgyExecutable(binDir);
+  initGitRepo(repo);
+  commit(repo, "src/app.js", "export const value = 1;\n");
+  fs.writeFileSync(path.join(repo, "src", "app.js"), "export const value = 2;\n", "utf8");
+
+  const result = run("node", [SCRIPT, "review", "--engine", "agy", "--scope", "working-tree"], {
+    cwd: repo,
+    env: buildFailingAgyEnv(binDir)
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}${result.stderr}`, expectedStderr);
+
+  const state = JSON.parse(fs.readFileSync(path.join(resolveStateDir(repo), "state.json"), "utf8"));
+  assert.equal(state.jobs[0].status, "failed");
+  assert.equal(state.jobs[0].failure.category, "transcript-missing");
 });
 
 test("dispatchAdversarialReview queues prompt-identical blind jobs with a shared groupId", () => {
