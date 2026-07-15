@@ -7,11 +7,11 @@ import { runCommand, runCommandChecked } from "./process.mjs";
 const MAX_UNTRACKED_BYTES = 24 * 1024;
 
 function git(cwd, args, options = {}) {
-  return runCommand("git", args, { cwd, ...options });
+  return runCommand("git", args, { cwd, ...options, shell: false });
 }
 
 function gitChecked(cwd, args, options = {}) {
-  return runCommandChecked("git", args, { cwd, ...options });
+  return runCommandChecked("git", args, { cwd, ...options, shell: false });
 }
 
 export function ensureGitRepository(cwd) {

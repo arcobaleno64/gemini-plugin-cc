@@ -98,8 +98,8 @@ test("setup is not ready when gemini is installed but unauthenticated", () => {
   assert.equal(result.status, 0, result.stderr);
   const payload = JSON.parse(result.stdout);
   // Core P0-3 contract: an unauthenticated gemini is never "ready". (readyState
-  // may be "partial" when a real AGY fallback happens to be on PATH, so it is
-  // asserted deterministically in the AGY-fallback test instead.)
+  // may be "partial" when a real AGY engine happens to be on PATH, so it is
+  // asserted deterministically in the AGY-available test instead.)
   assert.equal(payload.ready, false);
   assert.equal(payload.gemini.available, true);
   assert.equal(payload.geminiAuth.loggedIn, false);
@@ -120,7 +120,7 @@ test("setup is not ready when the gemini OAuth token is expired", () => {
   assert.match(payload.geminiAuth.detail, /expired/i);
 });
 
-test("setup reports a partial AGY fallback when gemini is unavailable but agy is present", () => {
+test("setup reports a partial supported AGY engine when gemini is unavailable but agy is present", () => {
   const binDir = makeTempDir();
   installUnavailableGemini(binDir);
   installFakeAgy(binDir);
@@ -133,7 +133,13 @@ test("setup reports a partial AGY fallback when gemini is unavailable but agy is
   assert.equal(payload.agy.available, true);
   assert.equal(payload.ready, false);
   assert.equal(payload.readyState, "partial");
+  assert.equal(payload.agyAvailable, true);
   assert.equal(payload.agyFallbackAvailable, true);
+  assert.equal(payload.agyAuth.loggedIn, false);
+  assert.equal(payload.agyAuth.state, "unknown");
+  assert.equal(payload.agyAuth.verifiable, false);
+  assert.match(payload.agyAuth.detail, /cannot be verified non-interactively/i);
+  assert.doesNotMatch(payload.agyAuth.detail, /shared Google OAuth|Run `gemini`/i);
   assert.ok(payload.nextSteps.some((step) => /--engine agy/.test(step)));
 });
 
@@ -217,6 +223,9 @@ test("setup --engine agy is partial, never fully ready, when agy is present but 
   assert.equal(payload.agy.available, true);
   assert.equal(payload.ready, false);
   assert.equal(payload.readyState, "partial");
+  assert.equal(payload.agyAvailable, true);
+  assert.equal(payload.agyAuth.state, "unknown");
+  assert.equal(payload.agyAuth.verifiable, false);
   assert.ok(payload.nextSteps.some((step) => /cannot be verified|authentication/i.test(step)));
 });
 
@@ -236,8 +245,8 @@ test("non-JSON setup --engine agy does not claim Gemini is not ready when it is"
 });
 
 // The default-engine partial (Gemini genuinely unavailable, AGY present) must
-// still render the AGY-fallback label.
-test("non-JSON setup keeps the AGY-fallback partial label when gemini is unavailable", () => {
+// render AGY as an available supported engine.
+test("non-JSON setup renders AGY as available when gemini is unavailable", () => {
   const binDir = makeTempDir();
   installUnavailableGemini(binDir);
   installFakeAgy(binDir);
@@ -245,7 +254,7 @@ test("non-JSON setup keeps the AGY-fallback partial label when gemini is unavail
   const result = run("node", [SCRIPT, "setup"], { cwd: makeTempDir(), env: buildEnvUnavailable(binDir) });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /AGY fallback only — Gemini CLI not ready/);
+  assert.match(result.stdout, /AGY available — Gemini CLI not ready/);
 });
 
 // Setup readiness must use the same engine allow-set as the runtime resolver

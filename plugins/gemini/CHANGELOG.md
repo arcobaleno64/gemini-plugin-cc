@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.8.0 — 2026-07-15 — First-class AGY and Git hardening
+
+### Security
+- **Git helpers no longer route repository-derived arguments through a Windows shell.** Every call in `lib/git.mjs` now forces `shell:false` after caller options, so auto-detected refs are passed as literal argv and cannot be reinterpreted by `cmd.exe`. A cross-platform regression creates a valid default ref containing `&`, places an adjacent command probe on `PATH`, and verifies branch target detection and diff collection complete without executing the probe. The test helper now honors an explicit `shell` override. ([#18](https://github.com/arcobaleno64/gemini-plugin-cc/issues/18))
+
+### Changed
+- **AGY is documented and reported as a first-class supported engine.** Gemini CLI and AGY are conditional dependencies: users install the CLI for the engine they select, while `auto` keeps capability-based Gemini→AGY ordering because Gemini exposes the plugin's JSON/model contract. Setup now permits the official `curl` installer without incorrectly requiring npm; runtime labels, skills, failure guidance, attribution, and the English/Traditional Chinese READMEs no longer describe AGY as an optional or lower-tier fallback.
+- **AGY authentication status is now honest.** AGY 1.1.x uses an independent `consumerOAuth` flow whose state cannot be inferred from Gemini's `~/.gemini/oauth_creds.json`. `getAgyLoginStatus()` now returns `state:"unknown"` and `verifiable:false` for an installed AGY binary, instructs users to run `agy` interactively, and never claims the shared Gemini credential proves AGY login. The existing `loggedIn` and `agyFallbackAvailable` fields remain for JSON compatibility; consumers should use `agyAuth.state`, and the additive `agyAvailable` field carries the support-neutral availability signal.
+
+### Documentation
+- Added the AGY 1.1.2 macOS/Linux validation checklist and Ubuntu 24.04 WSL2 live evidence for stdin/stdout, foreground task, background task, structured review, invalid-model failure, OAuth TTY/headless behavior, transcript pairing, and the complete Linux test suite. Real macOS 1.1.2 remains explicitly `OPTIONAL / NOT RUN` as a platform-validation gate, not an indication that the AGY engine itself is optional.
+- Updated the AGY prompting anti-patterns to distinguish older positional `--print` behavior from the 1.1.2 stdin auto-print path while retaining transcript-authoritative recovery.
+
+### Tests
+- The complete Windows suite passes: 238 tests, 235 passed, 0 failed, with 3 POSIX-only AGY fixtures skipped as expected. A real local AGY 1.1.2 `setup --engine agy` smoke reports `agyAvailable:true`, `authState:"unknown"`, and `authVerifiable:false` without reading or exposing credentials.
+
+### Compatibility
+- No slash-command flags, engine names, permission policy, transcript recovery, timeout, or task/review result structure changed. Gemini-only and AGY-only installations remain valid; installing both CLIs is not required.
+
 ## 0.7.1 — 2026-07-14 — AGY stdin transport
 
 ### Changed

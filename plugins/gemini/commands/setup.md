@@ -1,7 +1,7 @@
 ---
 description: Check whether Gemini CLI / AGY is ready and optionally toggle the stop-time review gate
 argument-hint: '[--engine <agy|gemini>] [--enable-review-gate|--disable-review-gate]'
-allowed-tools: Bash(node:*), Bash(npm:*), AskUserQuestion
+allowed-tools: Bash(node:*), Bash(npm:*), Bash(curl:*), AskUserQuestion
 ---
 
 Run:
@@ -10,11 +10,14 @@ Run:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" setup --json "$ARGUMENTS"
 ```
 
-Gemini CLI is the primary engine. AGY is an optional fallback that is only
-relevant when the user routes to it with `--engine agy` (or `GEMINI_ENGINE=agy`).
-Drive the install decisions below off the setup JSON's `requestedEngine` field,
-which already resolves both the `--engine` flag and the `GEMINI_ENGINE`
-environment variable — do **not** branch on the raw `$ARGUMENTS` text.
+Gemini CLI and AGY are first-class supported engines. Each is a conditional
+dependency: the user only needs the binary for the engine they select. In
+`auto` mode Gemini is checked first because it exposes the plugin's JSON/model
+contract, then AGY is checked; that order does not make AGY an optional or
+lower-tier integration. Drive the install decisions below off the setup JSON's
+`requestedEngine` field, which already resolves both the `--engine` flag and
+the `GEMINI_ENGINE` environment variable — do **not** branch on the raw
+`$ARGUMENTS` text.
 
 If the result says Gemini CLI is unavailable (`gemini.available` is false), npm
 is available, and `requestedEngine` is **not** `agy`:
@@ -35,8 +38,8 @@ npm install -g @google/gemini-cli
 node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" setup --json "$ARGUMENTS"
 ```
 
-Only if `requestedEngine` is `agy`, AGY is unavailable
-(`agy.available` is false), and npm is available:
+When `requestedEngine` is `agy` and AGY is unavailable
+(`agy.available` is false):
 - Use `AskUserQuestion` exactly once to ask whether Claude should install AGY now.
 - Put the install option first and suffix it with `(Recommended)`.
 - Use these two options:
@@ -55,12 +58,12 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" setup --json "$ARGUMEN
 ```
 
 Do not ask about installation when:
-- Gemini CLI is already available (even if it still needs authentication) **and
-  `requestedEngine` is not `agy`**, or
-- npm is unavailable, or
+- the selected engine is already available (even if it still needs
+  authentication), or
+- Gemini CLI is the missing selected/auto candidate and npm is unavailable, or
 - the only missing engine is AGY and `requestedEngine` is not `agy`. In that
-  case Gemini is the default engine; mention AGY only as an optional fallback,
-  do not push its installation.
+  case AGY is not the selected conditional dependency, so do not push its
+  installation.
 
 When `requestedEngine` is `agy` and AGY is unavailable, the AGY install prompt
 above takes precedence even if Gemini CLI is already present — the user routed

@@ -19,7 +19,7 @@ function setupReport(overrides = {}) {
     gemini: { detail: "0.44.1" },
     geminiAuth: { detail: "logged in" },
     agy: { detail: "1.0.2" },
-    agyAuth: { detail: "logged in" },
+    agyAuth: { loggedIn: false, state: "unknown", verifiable: false, detail: "authentication unknown" },
     sessionRuntime: { label: "gemini 0.44.1" },
     reviewGateEnabled: false,
     actionsTaken: [],
@@ -35,6 +35,7 @@ test("renderSetupReport lists every check and the review-gate state", () => {
   assert.match(out, /- node: v24\.0\.0/);
   assert.match(out, /- gemini: 0\.44\.1/);
   assert.match(out, /- agy: 1\.0\.2/);
+  assert.match(out, /- agy auth: authentication unknown/);
   assert.match(out, /- review gate: enabled/);
   assert.match(out, /Next steps:/);
 });

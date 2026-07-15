@@ -123,10 +123,10 @@ Pipe `agy --print "..."` and read its stdout, or tell AGY to print only the fina
 ```
 
 Better:
-- Let the plugin recover the response from AGY's on-disk transcript — that is the only reliable channel.
+- Let the plugin treat AGY's on-disk transcript as authoritative, even when AGY 1.1.2 also emits stdout.
 - Prefer the **gemini** engine (`--output-format json`) when you need clean, pipeable structured output.
 
-Explanation: `agy --print` does not deliver its response over a pipe in non-interactive use (upstream google-gemini/gemini-cli#27466). No prompt instruction changes that; the plugin diffs the transcript dirs to recover the answer; this path is verified on Windows and macOS (same brain root), with Linux reported working.
+Explanation: older positional `agy --print` releases did not deliver responses over a pipe (upstream google-gemini/gemini-cli#27466). AGY 1.1.2's stdin auto-print path can emit stdout, but the plugin still diffs transcript dirs for the completed response, DONE status, thinking, and conversation id. The 1.1.2 path is live-verified on Windows and Ubuntu WSL2; real macOS 1.1.2 remains not run.
 
 ## Assuming Gemini/AGY behaves like Codex (parity-specific)
 

@@ -19,6 +19,6 @@ adapted architecture includes, in particular:
 
 Gemini/AGY-specific modifications and additions — including engine detection
 and routing, stdin prompt delivery, the model-map alias/effort source, AGY
-fallback handling, OAuth status checks, and the contract-verification script —
+engine handling, OAuth status checks, and the contract-verification script —
 are Copyright (c) 2026 arcobaleno64 and are distributed under the MIT License
 (see LICENSE). They are original work and are not part of the upstream project.

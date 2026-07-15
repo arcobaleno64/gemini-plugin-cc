@@ -4,8 +4,8 @@ import process from "node:process";
 
 // This is not a reliable cmd.exe escaper: embedded quotes toggle cmd's parse
 // state, and backslashes escape quotes for MSVCRT children, not for cmd.exe.
-// Keep it only as a belt-and-suspenders safety net for the fixed-constant argv
-// used by remaining bare-name command paths (git/where/gemini/taskkill), never
+// Keep it only as a belt-and-suspenders safety net for fixed or validated argv
+// used by remaining bare-name command paths (where/gemini/taskkill), never
 // as protection for free text. Gemini and AGY >=1.1.2 prompts use stdin; older
 // AGY positional prompts are protected by absolute-path resolution and
 // therefore shell:false instead.

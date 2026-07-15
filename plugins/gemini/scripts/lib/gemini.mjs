@@ -562,22 +562,18 @@ export function getGeminiPlanTier() {
 export function getAgyLoginStatus() {
   const status = binaryAvailable("agy", ["--version"]);
   if (!status.available) {
-    return { loggedIn: false, detail: "AGY binary not found." };
+    return { loggedIn: false, state: "unavailable", verifiable: false, detail: "AGY binary not found." };
   }
-  // AGY (Antigravity) stores no credential of its own — verified: no oauth/token
-  // file exists under any ~/.antigravity* or ~/.gemini/antigravity-cli dir; it
-  // runs off the SAME Google OAuth as the gemini CLI (~/.gemini/oauth_creds.json,
-  // with per-machine state under ~/.gemini/antigravity-cli/). So gauge agy auth
-  // from that shared credential — the only signal available without an
-  // interactive run.
-  const shared = getGeminiLoginStatus();
-  const pipeNote = "Note: agy --print does not return output over a pipe (#27466); the plugin recovers responses from the transcript.";
-  if (shared.loggedIn) {
-    return { loggedIn: true, detail: `AGY ${status.detail ?? ""} present; shared Google OAuth valid. ${pipeNote}`.trim() };
-  }
+  // AGY 1.1.x uses its own consumerOAuth flow and may store credentials in an
+  // OS credential service. Gemini's ~/.gemini/oauth_creds.json is therefore not
+  // evidence of AGY authentication. Keep `loggedIn` for JSON compatibility, but
+  // pair it with an explicit unknown state so callers do not interpret it as a
+  // verified logout.
   return {
     loggedIn: false,
-    detail: `AGY ${status.detail ?? ""} present, but the shared Google OAuth is missing/expired (${shared.detail}). Run \`gemini\` once to authenticate. ${pipeNote}`.trim(),
+    state: "unknown",
+    verifiable: false,
+    detail: `AGY ${status.detail ?? ""} present; authentication cannot be verified non-interactively. Run \`agy\` once interactively to authenticate or refresh credentials.`.trim(),
   };
 }
 
@@ -591,7 +587,7 @@ export function getSessionRuntimeStatus() {
   const label = gemini.available
     ? "gemini CLI (per-command)"
     : agy.available
-      ? "agy fallback (per-command)"
+      ? "agy (per-command)"
       : "no engine available";
   return { mode: "direct", gemini, agy, available, label };
 }

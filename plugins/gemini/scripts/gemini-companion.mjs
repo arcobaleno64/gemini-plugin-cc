@@ -179,7 +179,7 @@ function buildSetupReport(cwd, actionsTaken = [], options = {}) {
 
   // Readiness is computed for the engine the user actually selected (via
   // `--engine` or GEMINI_ENGINE). The default/gemini path mirrors upstream: the
-  // primary engine must be installed AND authenticated. Explicit `--engine agy`
+  // auto-preferred engine must be installed AND authenticated. Explicit `--engine agy`
   // must NOT inherit Gemini's ready state — it depends on the AGY binary (whose
   // auth cannot be verified non-interactively), so AGY-present is "partial" and
   // AGY-missing is "not-ready".
@@ -191,7 +191,10 @@ function buildSetupReport(cwd, actionsTaken = [], options = {}) {
     requestedEngine === "" || requestedEngine === "auto" || requestedEngine === "gemini" || requestedEngine === "agy";
   const agySelected = requestedEngine === "agy";
   const geminiReady = geminiStatus.available && geminiAuth.loggedIn;
-  const agyFallbackAvailable = agyStatus.available;
+  const agyAvailable = agyStatus.available;
+  // Backward-compatible alias retained for existing JSON consumers. AGY is a
+  // first-class supported engine; "fallback" describes only auto-routing order.
+  const agyFallbackAvailable = agyAvailable;
   // AGY auth cannot be verified non-interactively, so `--engine agy` is never
   // reported as fully `ready` — the most it reaches is `readyState: "partial"`
   // (binary present, auth unknown). `ready:true` is reserved for a verified
@@ -208,7 +211,7 @@ function buildSetupReport(cwd, actionsTaken = [], options = {}) {
           : "not-ready"
         : geminiReady
           ? "ready"
-          : agyFallbackAvailable
+          : agyAvailable
             ? "partial"
             : "not-ready";
 
@@ -229,14 +232,16 @@ function buildSetupReport(cwd, actionsTaken = [], options = {}) {
     );
   }
   if (!geminiStatus.available && !agyStatus.available) {
-    nextSteps.push("Install Gemini CLI with `npm install -g @google/gemini-cli`.");
+    nextSteps.push(
+      "Install at least one supported engine: Gemini CLI with `npm install -g @google/gemini-cli`, or AGY with `curl -fsSL https://antigravity.google/cli/install.sh | bash`."
+    );
   }
   if (!agySelected && geminiStatus.available && !geminiAuth.loggedIn) {
     nextSteps.push("Run `gemini` once to authenticate via OAuth.");
   }
-  if (!agySelected && !geminiStatus.available && agyFallbackAvailable) {
+  if (!agySelected && !geminiStatus.available && agyAvailable) {
     nextSteps.push(
-      "Gemini CLI is unavailable; AGY is present as a fallback. Use `--engine agy` to route through it (its auth state cannot be verified), or install Gemini CLI with `npm install -g @google/gemini-cli` for the default engine."
+      "Gemini CLI is unavailable; AGY is installed as a supported engine and auto routing can select it. Use `--engine agy` explicitly to confirm its authentication state, or install Gemini CLI to restore the preferred auto-routing candidate."
     );
   }
 
@@ -261,6 +266,7 @@ function buildSetupReport(cwd, actionsTaken = [], options = {}) {
     readyState,
     requestedEngine: requestedEngine || "auto",
     geminiReady,
+    agyAvailable,
     agyFallbackAvailable,
     geminiPlanTier,
     node: nodeStatus,

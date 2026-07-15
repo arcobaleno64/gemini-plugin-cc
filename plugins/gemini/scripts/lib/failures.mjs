@@ -19,7 +19,7 @@ const DEFAULTS = {
   "binary-missing": {
     retryable: false,
     summary: "Required CLI binary is not available.",
-    nextStep: "Install Gemini CLI, or use `--engine agy` only after AGY is installed and initialized."
+    nextStep: "Install and initialize either supported engine, then select it with `--engine gemini` or `--engine agy`."
   },
   auth: {
     retryable: false,

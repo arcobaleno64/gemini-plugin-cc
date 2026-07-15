@@ -27,7 +27,7 @@ Compared with AGY-only, multi-host plugins, this project keeps the Gemini CLI pa
 | Need | Use this plugin when... |
 |---|---|
 | Gemini CLI still works for you | You want model selection, JSON output, and stdin prompt delivery. |
-| You are migrating to AGY | Use `--engine agy` for Antigravity CLI fallback. |
+| You are migrating to AGY | Use `--engine agy` as the fully supported Antigravity CLI backend. |
 | You want adversarial review | Use `/gemini:adversarial-review` with optional focus text. |
 | You need AGY-only multi-host support | Consider an AGY-only plugin instead. |
 
@@ -35,13 +35,13 @@ Compared with AGY-only, multi-host plugins, this project keeps the Gemini CLI pa
 
 ## Features
 
-- **`/gemini:rescue`** — Delegate investigation, debugging, or implementation tasks to Gemini. Runs in the foreground or detached in the background.
+- **`/gemini:rescue`** — Delegate investigation, debugging, or implementation tasks to the selected Gemini CLI or AGY engine. Runs in the foreground or detached in the background.
 - **`/gemini:review`** — Standard (pragmatic) code review over the current diff or branch. Finds real bugs, missing error handling, and incomplete code paths. Add `--deep` for an agentic pass that explores repo context beyond the diff.
 - **`/gemini:adversarial-review`** — Adversarial code review that challenges design decisions over the current diff or branch. Returns structured findings with severity ratings.
 - **`/gemini:setup`** — Check Gemini CLI / AGY availability and OAuth status.
 - **`/gemini:status`** — Inspect active and completed background jobs.
 - **`/gemini:result`** / **`/gemini:cancel`** — Retrieve or cancel a background job.
-- **Engine auto-detection** — Prefers `gemini` CLI (pipe-safe); falls back to `agy`.
+- **Engine auto-detection** — Both engines are first-class; `auto` checks `gemini` first for its JSON/model contract, then `agy`.
 - **Version-aware stdin prompt delivery** — Gemini always uses stdin; AGY 1.1.2 or newer uses its auto-print stdin path, while older or unknown versions retain the compatible positional path.
 - **Session lifecycle hooks** — Automatically injects `GEMINI_COMPANION_SESSION_ID`; cleans up stale jobs on session end.
 
@@ -52,13 +52,13 @@ Compared with AGY-only, multi-host plugins, this project keeps the Gemini CLI pa
 | Requirement | Version | Install |
 |---|---|---|
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
-| Gemini CLI | ≥ 0.40 | `npm install -g @google/gemini-cli` |
-| AGY _(optional)_ | ≥ 1.0.3; ≥ 1.1.2 recommended (Windows verified) | _(see install note below)_ |
+| Gemini CLI | ≥ 0.40; required for the `gemini` engine | `npm install -g @google/gemini-cli` |
+| AGY | ≥ 1.0.3; ≥ 1.1.2 recommended and live-verified on Windows/Ubuntu WSL2 | _(see install note below)_ |
 | Claude Code | any | [claude.ai/code](https://claude.ai/code) |
 
-**Install AGY** (optional fallback): `curl -fsSL https://antigravity.google/cli/install.sh | bash`
+**Install AGY** (required for `--engine agy`): `curl -fsSL https://antigravity.google/cli/install.sh | bash`
 
-**Authentication**: Run `gemini` once to complete OAuth. No API key is required.
+**Authentication**: Each engine authenticates independently. Run `gemini` once for the Gemini engine, or run `agy` once interactively for the AGY engine. AGY authentication cannot be verified reliably from a headless setup probe, so `/gemini:setup --engine agy` reports it as unknown until a real AGY command succeeds. No API key is required.
 
 > **Heads-up (reality check):**
 > - **2026-06-18 consumer transition**: Google announced that free/personal, Google AI Pro, and Google AI Ultra Gemini CLI requests stop being served after this date; Standard/Enterprise access remains. See Google's [Gemini CLI to Antigravity CLI announcement](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/).
@@ -83,17 +83,17 @@ Compared with AGY-only, multi-host plugins, this project keeps the Gemini CLI pa
 
 ### Pinned release (a specific published version)
 
-Pin the marketplace to a release tag — e.g. `v0.7.1`:
+Pin the marketplace to a release tag — e.g. `v0.8.0`:
 
 ```
-/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.7.1
+/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.8.0
 /plugin install gemini@gemini-plugin-cc
 /reload-plugins
 ```
 
-> Claude Code installs plugins from the git tree, not from GitHub Release tarballs — `@<tag>` selects the git tag behind a [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases). A pinned install does **not** auto-update; to move to a newer release, re-add the marketplace with the new tag (e.g. `…@v0.7.2`).
+> Claude Code installs plugins from the git tree, not from GitHub Release tarballs — `@<tag>` selects the git tag behind a [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases). A pinned install does **not** auto-update; to move to a newer release, re-add the marketplace with the new tag (e.g. `…@v0.8.1`).
 
-Then run `/gemini:setup` — it will check whether Gemini CLI is ready. If Gemini is missing and npm is available, it will offer to install it for you.
+Then run `/gemini:setup` for `auto`/Gemini, or `/gemini:setup --engine agy` for AGY. The selected engine is the only engine dependency that must be installed; setup offers the matching installer when it is missing.
 
 If Gemini is installed but not authenticated yet, run:
 
@@ -231,7 +231,7 @@ When enabled and the review returns `needs-attention`, Claude Code is blocked fr
 In `auto` mode the plugin selects the first available engine in this order:
 
 1. **`gemini` CLI** — outputs via stdout; supports stdin prompt delivery.
-2. **`agy`** — fallback; AGY 1.1.2 or newer receives the prompt on stdin with no `--print` flag, while older or unknown versions retain `agy --print <prompt>`.
+2. **`agy`** — first-class supported engine and second `auto` candidate; AGY 1.1.2 or newer receives the prompt on stdin with no `--print` flag, while older or unknown versions retain `agy --print <prompt>`.
 
 Override via `--engine` flag or the `GEMINI_ENGINE` environment variable.
 
@@ -245,6 +245,7 @@ Override via `--engine` flag or the `GEMINI_ENGINE` environment variable.
 
 - **Stdin delivery**: Gemini prompts and AGY 1.1.2-or-newer prompts use Node's `spawnSync` `input` option and never enter argv. AGY versions older than 1.1.2, plus unparseable versions, keep the positional compatibility path and its 24,000-character limit; prefer Gemini or AGY 1.1.2+ for untrusted prompt content.
 - **Windows process boundary**: Gemini's npm `.cmd` shim is launched through `shell:true`, but its prompt remains on stdin and only validated flags enter argv. AGY must resolve to an absolute `.exe` and is always launched with `shell:false`.
+- **Git process boundary**: Repository-derived refs are always passed to Git as literal argv with `shell:false`, including on Windows; Git helpers never inherit the `.cmd` wrapper fallback.
 - **DEP0190 warning is benign**: On Windows you may see `(node:NNN) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.` This is **safe to ignore here** — the deprecation is about *prompt content* placed in argv under `shell: true`, but this plugin never does that for the gemini engine: the prompt travels on stdin, and only controlled flags reach argv (each validated, e.g. model ids must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`). The warning is Node flagging the general pattern, not an actual injection vector in this code path.
 - **AGY transport fallback**: Only a stable parsed version of 1.1.2 or newer enables stdin. Unknown and prerelease version strings fail closed to the existing positional path, preserving compatibility rather than assuming an upstream capability.
 - **Credential handling**: OAuth credentials in `~/.gemini/oauth_creds.json` are read only to check token expiry via `getGeminiLoginStatus()`; they are never logged, copied elsewhere, or transmitted by this plugin.
@@ -260,11 +261,11 @@ Override via `--engine` flag or the `GEMINI_ENGINE` environment variable.
 | `npm: not found` | Node/npm missing from PATH | Install Node.js ≥ 18 from [nodejs.org](https://nodejs.org) |
 | setup shows `gemini auth: No credentials …` | OAuth not completed | Run `!gemini` once and complete the browser login |
 | setup shows `… token expired` | OAuth token lapsed | Run `!gemini` again to refresh credentials |
-| `Status: partial (AGY fallback only …)` | Gemini CLI unavailable but AGY present | Install Gemini CLI, or use `--engine agy` (its auth cannot be verified) |
+| `Status: partial (AGY available …)` | Gemini CLI unavailable but AGY present | Use `--engine agy` directly; setup keeps AGY auth `unknown` because it cannot verify the independent AGY OAuth flow non-interactively |
 | Windows: command resolves but fails | `.cmd` wrapper / PATH | Confirm `where gemini` resolves; the plugin spawns bare names through `shell: true` to find `.cmd` shims |
 | `--engine agy` reports no brain root | AGY has not created its brain directory yet, or it lives in an unknown location | Run `agy` once so it creates the brain dir. Known roots: `~/.gemini/antigravity-cli/brain` (verified on Windows, macOS AGY 1.0.7, and Linux AGY 1.1.2) and `~/.antigravity-cli/brain` (older Linux 1.0.2, reported); if yours differs, open an issue with its location |
 
-To authenticate, run **`!gemini`** once — the plugin completes OAuth by invoking `gemini` itself. There is **no** `gemini login` subcommand. `setup` reports `ready: true` only when Node **and** the Gemini CLI are present **and** OAuth is valid; an installed-but-unauthenticated Gemini is reported as *not ready*.
+For the Gemini engine, run **`!gemini`** once — the plugin completes OAuth by invoking `gemini` itself. There is **no** `gemini login` subcommand. For the AGY engine, run `agy` interactively once; its separate OAuth state is not inferred from Gemini's `~/.gemini/oauth_creds.json`. `setup` reports AGY as `partial` while the binary is present but auth remains unverifiable.
 
 ---
 
@@ -288,13 +289,13 @@ Background mode spawns a detached worker child process (`task-worker` for `/gemi
 
 ## Parity with codex-plugin-cc
 
-This plugin is a high-fidelity port of [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc). The public slash-command surface, background job model, and state/result/status/cancel flow mirror the upstream; the execution backend is the Gemini CLI (with an AGY fallback) rather than the Codex app server.
+This plugin is a high-fidelity port of [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc). The public slash-command surface, background job model, and state/result/status/cancel flow mirror the upstream; the execution backends are the first-class Gemini CLI and AGY engines rather than the Codex app server.
 
 ### Compatibility Matrix
 
 | Upstream (Codex) | This plugin (Gemini) | Parity |
 |---|---|---|
-| `/codex:setup` | `/gemini:setup` | **Gemini-specific divergence** — checks `gemini` OAuth + optional AGY fallback instead of Codex auth |
+| `/codex:setup` | `/gemini:setup` | **Gemini-specific divergence** — checks Gemini OAuth or AGY binary readiness for the selected first-class engine instead of Codex auth |
 | `/codex:review` | `/gemini:review` | **best-effort equivalent** — prompt / CLI-adapter review, not a native reviewer |
 | `/codex:adversarial-review` | `/gemini:adversarial-review` | **best-effort equivalent** — adversarial prompt over the same diff target |
 | `/codex:rescue` | `/gemini:rescue` | **1:1 parity** — same forwarder/subagent contract and flags |
@@ -304,7 +305,7 @@ This plugin is a high-fidelity port of [openai/codex-plugin-cc](https://github.c
 
 ### Codex app server vs Gemini CLI adapter
 
-- **Runtime**: Codex uses a persistent app-server with native review and persistent threads. This plugin invokes the Gemini CLI directly *per command* (no shared runtime); AGY is an optional fallback.
+- **Runtime**: Codex uses a persistent app-server with native review and persistent threads. This plugin invokes the selected first-class Gemini CLI or AGY engine directly *per command* (no shared runtime); `auto` uses capability-based Gemini→AGY ordering.
 - **Standard review**: In the Codex plugin, `/codex:review` is a *native* reviewer. Here, `/gemini:review` is a **prompt-based / CLI-adapter equivalent** — it sends the diff to Gemini with a pragmatic-review prompt and parses structured JSON back. It is not a native Gemini reviewer.
 - **Sandbox**: Codex exposes `read-only` / `workspace-write` sandboxes. Gemini has no equivalent; write access is gated by `--write` (`--yolo`), and otherwise the prompt enforces read-only discipline. (`--approval-mode plan` is intentionally not used: it requires a TTY and conflicts with stdin prompt delivery.)
 - **Thread/session resume**: Codex persists threads on the app server. Here, resume relies on the Gemini CLI **session id** captured from the JSON envelope; `/gemini:result` prints `gemini --resume <session-id>`, and `--resume-last` continues the latest thread *for the current Claude session*.
@@ -346,4 +347,4 @@ This project is a derivative work of [openai/codex-plugin-cc](https://github.com
 
 **Derived from upstream** (adapted, Apache-2.0): the slash-command structure, the background job model (enqueue / worker / status / result / cancel), the `.omc/state` persistence and job-control patterns, the stop-time review-gate pattern, the skill contract layout, and the version/manifest tooling (`bump-version`).
 
-**Original to this repository** (MIT): the Gemini/AGY engine detection and routing, stdin prompt delivery, the `model-map` alias/effort source, the AGY fallback handling, OAuth status checks, and the contract-verification script.
+**Original to this repository** (MIT): the Gemini/AGY engine detection and routing, stdin prompt delivery, the `model-map` alias/effort source, AGY engine handling, OAuth status checks, and the contract-verification script.

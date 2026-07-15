@@ -155,7 +155,7 @@ export function buildFailingAgyEnv(binDir) {
 }
 
 // Shadow only gemini with a wrapper that fails its --version probe, leaving any
-// installed agy untouched. Pair with installFakeAgy for AGY-fallback assertions.
+// installed agy untouched. Pair with installFakeAgy for AGY-availability assertions.
 export function installUnavailableGemini(binDir) {
   if (process.platform === "win32") {
     fs.writeFileSync(path.join(binDir, "gemini.cmd"), `@echo off\r\nexit /b 1\r\n`, "utf8");

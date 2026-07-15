@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { collectReviewContext, formatUntrackedFile, getWorkingTreeState, resolveReviewTarget } from "../plugins/gemini/scripts/lib/git.mjs";
-import { initGitRepo, makeTempDir, run } from "./helpers.mjs";
+import { initGitRepo, makeTempDir, run, writeExecutable } from "./helpers.mjs";
 
 function commitInitial(cwd) {
   fs.writeFileSync(path.join(cwd, "app.js"), "console.log('v1');\n");
@@ -96,6 +96,62 @@ test("resolveReviewTarget rejects an unsafe --base ref", () => {
   commitInitial(cwd);
   assert.throws(() => resolveReviewTarget(cwd, { base: "--upload-pack=evil" }), /Invalid --base ref/);
   assert.throws(() => resolveReviewTarget(cwd, { base: "x; rm -rf /" }), /Invalid --base ref/);
+});
+
+test("auto-detected default refs with shell metacharacters stay literal", () => {
+  const cwd = makeTempDir();
+  const binDir = makeTempDir("gemini-git-ref-probe-");
+  const sentinel = path.join(cwd, "shell-injection-sentinel.txt");
+  const originalPath = process.env.PATH;
+  const originalSentinel = process.env.AGY_REF_SENTINEL;
+  const probeName = process.platform === "win32" ? "agyrefprobe.cmd" : "agyrefprobe";
+  const probeSource = process.platform === "win32"
+    ? "@echo off\r\n> \"%AGY_REF_SENTINEL%\" echo injected\r\n"
+    : "#!/bin/sh\nprintf injected > \"$AGY_REF_SENTINEL\"\n";
+
+  writeExecutable(path.join(binDir, probeName), probeSource);
+  process.env.PATH = `${binDir}${path.delimiter}${originalPath ?? ""}`;
+  process.env.AGY_REF_SENTINEL = sentinel;
+
+  try {
+    initGitRepo(cwd);
+    commitInitial(cwd);
+    const mainCommit = run("git", ["rev-parse", "HEAD"], { cwd, shell: false }).stdout.trim();
+    assert.ok(mainCommit);
+    assert.equal(
+      run("git", ["update-ref", "refs/heads/main&agyrefprobe", mainCommit], { cwd, shell: false }).status,
+      0
+    );
+    assert.equal(
+      run("git", ["update-ref", "refs/remotes/origin/main&agyrefprobe", mainCommit], { cwd, shell: false }).status,
+      0
+    );
+    assert.equal(
+      run(
+        "git",
+        ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main&agyrefprobe"],
+        { cwd, shell: false }
+      ).status,
+      0
+    );
+
+    run("git", ["checkout", "-b", "feature/literal-ref"], { cwd, shell: false });
+    fs.writeFileSync(path.join(cwd, "app.js"), "console.log('literal ref');\n");
+    run("git", ["add", "app.js"], { cwd, shell: false });
+    run("git", ["commit", "-m", "literal ref change"], { cwd, shell: false });
+
+    const target = resolveReviewTarget(cwd, { scope: "branch" });
+    const context = collectReviewContext(cwd, target);
+
+    assert.equal(target.baseRef, "main&agyrefprobe");
+    assert.match(context.content, /literal ref/);
+    assert.equal(fs.existsSync(sentinel), false, "a repository-derived ref must never execute an adjacent command");
+  } finally {
+    if (originalPath == null) delete process.env.PATH;
+    else process.env.PATH = originalPath;
+    if (originalSentinel == null) delete process.env.AGY_REF_SENTINEL;
+    else process.env.AGY_REF_SENTINEL = originalSentinel;
+  }
 });
 
 test("formatUntrackedFile skips a directory instead of crashing", () => {
