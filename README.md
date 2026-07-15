@@ -68,7 +68,7 @@ Compared with AGY-only, multi-host plugins, this project keeps the Gemini CLI pa
 
 ## Installation
 
-### Latest (tracks `main`, auto-updates)
+### Release channel (marketplace follows `main`)
 
 ```
 # 1. Add the marketplace
@@ -78,6 +78,20 @@ Compared with AGY-only, multi-host plugins, this project keeps the Gemini CLI pa
 /plugin install gemini@gemini-plugin-cc
 
 # 3. Reload plugins
+/reload-plugins
+```
+
+This marketplace source follows the repository's `main` branch, but that does **not** mean every Claude Code launch automatically installs and activates new code:
+
+- Claude Code identifies this plugin by its explicit manifest version. Existing installations update only after that version is bumped (normally as part of a release); unversioned commits on `main` with the same manifest version are not delivered as plugin updates.
+- Auto-update is disabled by default for third-party marketplaces. To opt in, open `/plugin`, select **Marketplaces** → **gemini-plugin-cc**, and choose **Enable auto-update**. When enabled, Claude Code checks the marketplace at startup and updates installed plugins whose resolved version changed.
+- If Claude Code reports that the plugin was updated, run `/reload-plugins` before using it in the current session. Opening Claude Code by itself is therefore not a reliable guarantee that a newly published version is already active.
+
+For an explicit update without enabling auto-update, run:
+
+```
+/plugin marketplace update gemini-plugin-cc
+/plugin update gemini@gemini-plugin-cc
 /reload-plugins
 ```
 
@@ -91,7 +105,7 @@ Pin the marketplace to a release tag — e.g. `v0.8.0`:
 /reload-plugins
 ```
 
-> Claude Code installs plugins from the git tree, not from GitHub Release tarballs — `@<tag>` selects the git tag behind a [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases). A pinned install does **not** auto-update; to move to a newer release, re-add the marketplace with the new tag (e.g. `…@v0.8.1`).
+> Claude Code installs plugins from the git tree, not from GitHub Release tarballs — `@<tag>` selects the git tag behind a [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases). A pinned marketplace stays on that tag even if marketplace auto-update is enabled. To move it to another release, remove the existing marketplace (which also uninstalls plugins installed from it), add the repository again with the new tag, reinstall the plugin, and run `/reload-plugins`.
 
 Then run `/gemini:setup` for `auto`/Gemini, or `/gemini:setup --engine agy` for AGY. The selected engine is the only engine dependency that must be installed; setup offers the matching installer when it is missing.
 

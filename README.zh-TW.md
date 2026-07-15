@@ -66,7 +66,7 @@
 
 ## 安裝
 
-### 最新版（追蹤 `main`，自動更新）
+### 發布通道（marketplace 來源追蹤 `main`）
 
 ```
 # 1. 加入 marketplace
@@ -76,6 +76,20 @@
 /plugin install gemini@gemini-plugin-cc
 
 # 3. 重新載入外掛
+/reload-plugins
+```
+
+此 marketplace 的來源追蹤 repository 的 `main` 分支，但這**不表示**每次啟動 Claude Code 都一定會自動安裝並啟用新程式碼：
+
+- Claude Code 依本外掛 manifest 中的明確版本號辨識更新。既有安裝只會在該版本號提高時更新（通常隨正式發布進行）；若 `main` 只有新 commit、manifest 版本號不變，該 commit 不會被當成外掛更新交付。
+- 第三方 marketplace 預設關閉自動更新。如要啟用，請開啟 `/plugin`，選擇 **Marketplaces** → **gemini-plugin-cc** → **Enable auto-update**。啟用後，Claude Code 會在啟動時檢查 marketplace，並更新 resolved version 已變更的已安裝外掛。
+- 若 Claude Code 顯示外掛已更新，請先執行 `/reload-plugins`，再於目前 session 使用。因此，僅打開 Claude Code 不能保證剛發布的版本已經生效。
+
+若不啟用自動更新，可明確執行：
+
+```
+/plugin marketplace update gemini-plugin-cc
+/plugin update gemini@gemini-plugin-cc
 /reload-plugins
 ```
 
@@ -89,7 +103,7 @@
 /reload-plugins
 ```
 
-> Claude Code 從 git tree 安裝外掛，**並非**從 GitHub Releases 的 tarball——`@<tag>` 選的是 [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases) 背後的 git 標籤。釘版安裝**不會**自動更新；欲升至新版，請以新標籤重新加入 marketplace（例如 `…@v0.8.1`）。
+> Claude Code 從 git tree 安裝外掛，**並非**從 GitHub Releases 的 tarball——`@<tag>` 選的是 [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases) 背後的 git 標籤。即使啟用 marketplace 自動更新，釘選的 marketplace 仍會停在該標籤。若要移至另一個 release，請先移除既有 marketplace（這也會解除安裝由它安裝的外掛），再以新標籤加入 repository、重新安裝外掛，最後執行 `/reload-plugins`。
 
 接著對 `auto`／Gemini 執行 `/gemini:setup`，或對 AGY 執行 `/gemini:setup --engine agy`。只需安裝所選引擎的 dependency；若缺少，setup 會提供對應安裝選項。
 

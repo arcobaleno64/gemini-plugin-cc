@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+- Corrected the installation and update guidance: third-party marketplaces do not auto-update by default; this versioned plugin is updated only when its resolved manifest version changes; an update reported during a running session still requires `/reload-plugins`; and a tag-pinned marketplace remains pinned until it is removed and re-added at another tag. No runtime behavior changed.
+
 ## 0.8.0 — 2026-07-15 — First-class AGY and Git hardening
 
 ### Security
