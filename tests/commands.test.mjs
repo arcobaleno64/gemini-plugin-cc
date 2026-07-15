@@ -96,12 +96,15 @@ test("review commands enforce verbatim output without a contradictory fix prompt
   }
 });
 
-// --- P0-4: AGY install is gated behind --engine agy; gemini is the primary engine ---
+// --- P0-4: engine dependencies follow the selected first-class engine ---
 
-test("setup prompts Gemini CLI install primarily and gates AGY behind --engine agy", () => {
+test("setup treats Gemini CLI and AGY as first-class conditional dependencies", () => {
   const source = readCommand("setup.md");
   assert.match(source, /Install Gemini CLI \(Recommended\)/);
   assert.match(source, /--engine agy/, "AGY install must be gated behind --engine agy");
+  assert.match(source, /Bash\(curl:\*\)/, "the first-class AGY installer must be allowed to invoke curl");
+  assert.match(source, /first-class supported engines/i);
+  assert.doesNotMatch(source, /AGY is an optional fallback/i);
 });
 
 test("setup authenticates by running gemini, not a nonexistent `gemini login`", () => {

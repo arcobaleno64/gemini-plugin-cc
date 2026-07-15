@@ -34,10 +34,13 @@ Command selection:
 - `task --resume-last`: for "keep going", "resume", "apply the top fix", or "dig deeper".
 
 Engine routing:
-- Default engine: auto-detect (gemini preferred, agy fallback).
+- Gemini CLI and AGY are both first-class supported engines; only the selected
+  engine's CLI is required.
+- Default engine: auto-detect in capability order (gemini first for its
+  JSON/model contract, then agy).
 - Force AGY: add `--engine agy`.
 - Force Gemini CLI: add `--engine gemini`.
-- Note: `--model` and `--effort` are ignored when the AGY engine is active; AGY selects its model and tier interactively.
+- Note: `--model` and `--effort` are ignored when the AGY engine is active; AGY uses its configured/default model and tier.
 
 Safety rules:
 - Default to write-capable work in `gemini:gemini-rescue` unless the user explicitly asks for read-only behavior.

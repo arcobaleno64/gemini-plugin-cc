@@ -200,7 +200,7 @@ export function renderSetupReport(report) {
     report.readyState === "partial"
       ? report.requestedEngine === "agy"
         ? "partial (AGY selected — binary present, auth not verifiable non-interactively)"
-        : "partial (AGY fallback only — Gemini CLI not ready)"
+        : "partial (AGY available — Gemini CLI not ready)"
       : report.ready
         ? "ready"
         : "needs attention";

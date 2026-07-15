@@ -25,7 +25,7 @@
 | 需求 | 適合使用本外掛的情境 |
 |---|---|
 | Gemini CLI 仍可用 | 你需要 model selection、JSON output 與 stdin prompt delivery。 |
-| 正在遷移到 AGY | 使用 `--engine agy` 作為 Antigravity CLI fallback。 |
+| 正在遷移到 AGY | 使用 `--engine agy` 作為完整支援的 Antigravity CLI 後端。 |
 | 需要 adversarial review | 使用 `/gemini:adversarial-review`，可加 focus text。 |
 | 需要 AGY-only 多宿主支援 | 可考慮 AGY-only plugin。 |
 
@@ -33,13 +33,13 @@
 
 ## 功能特色
 
-- **`/gemini:rescue`** — 將調查、除錯或實作任務委派給 Gemini。可在前景執行或以背景工作方式分離執行。
+- **`/gemini:rescue`** — 將調查、除錯或實作任務委派給所選的 Gemini CLI 或 AGY 引擎。可在前景執行或以背景工作方式分離執行。
 - **`/gemini:review`** — 對當前 diff 或分支執行標準（務實）程式碼審查，找出真實 bug、缺漏之錯誤處理與未竟之程式路徑。加 `--deep` 可進行 agentic 探查、看 diff 以外的 repo 脈絡。
 - **`/gemini:adversarial-review`** — 對當前 diff 或分支執行對抗性程式碼審查，挑戰設計決策，回傳含嚴重程度評級的結構化發現。
 - **`/gemini:setup`** — 檢查 Gemini CLI / AGY 的可用性與 OAuth 狀態。
 - **`/gemini:status`** — 查看作用中與已完成的背景工作。
 - **`/gemini:result`** / **`/gemini:cancel`** — 取得或取消背景工作。
-- **引擎自動偵測** — 優先使用 `gemini` CLI（支援 pipe 輸出）；備援退回至 `agy`。
+- **引擎自動偵測** — 兩個引擎皆為第一級支援；`auto` 因 JSON／model 合約先檢查 `gemini`，再檢查 `agy`。
 - **版本感知的 stdin 提示傳遞** — Gemini 固定走 stdin；AGY 1.1.2 以上走自動 print 的 stdin 路徑，舊版或版本不明時保留 positional 相容路徑。
 - **會話生命週期掛鉤** — 自動注入 `GEMINI_COMPANION_SESSION_ID`；會話結束時清理殘留工作。
 
@@ -50,13 +50,13 @@
 | 項目 | 版本 | 安裝方式 |
 |---|---|---|
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
-| Gemini CLI | ≥ 0.40 | `npm install -g @google/gemini-cli` |
-| AGY _(選用)_ | ≥ 1.0.3；建議 ≥ 1.1.2（Windows 已驗證） | _(安裝指令見下)_ |
+| Gemini CLI | ≥ 0.40；使用 `gemini` 引擎時必須安裝 | `npm install -g @google/gemini-cli` |
+| AGY | ≥ 1.0.3；建議 ≥ 1.1.2，已於 Windows／Ubuntu WSL2 live 驗證 | _(安裝指令見下)_ |
 | Claude Code | 任意版本 | [claude.ai/code](https://claude.ai/code) |
 
-**安裝 AGY**（選用備援）：`curl -fsSL https://antigravity.google/cli/install.sh | bash`
+**安裝 AGY**（使用 `--engine agy` 時必須安裝）：`curl -fsSL https://antigravity.google/cli/install.sh | bash`
 
-**認證**：執行一次 `gemini` 完成 OAuth 登入。不需要 API 金鑰。
+**認證**：兩個引擎各自認證。Gemini 引擎請執行一次 `gemini`；AGY 引擎請互動式執行一次 `agy`。Headless setup probe 無法可靠驗證 AGY 認證，因此 `/gemini:setup --engine agy` 會將其標為 unknown，直到真實 AGY 命令成功。不需要 API 金鑰。
 
 > **重要提示（貼近現實）：**
 > - **2026-06-18 consumer transition**：Google 宣布免費／個人版、Google AI Pro、Google AI Ultra 的 Gemini CLI requests 於此日期後停止服務；Standard/Enterprise access 維持。詳見 Google 的 [Gemini CLI to Antigravity CLI announcement](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)。
@@ -81,17 +81,17 @@
 
 ### 釘選發布版（指定某個已發布版本）
 
-將 marketplace 釘到某個 release 標籤——例如 `v0.7.1`：
+將 marketplace 釘到某個 release 標籤——例如 `v0.8.0`：
 
 ```
-/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.7.1
+/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.8.0
 /plugin install gemini@gemini-plugin-cc
 /reload-plugins
 ```
 
-> Claude Code 從 git tree 安裝外掛，**並非**從 GitHub Releases 的 tarball——`@<tag>` 選的是 [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases) 背後的 git 標籤。釘版安裝**不會**自動更新；欲升至新版，請以新標籤重新加入 marketplace（例如 `…@v0.7.2`）。
+> Claude Code 從 git tree 安裝外掛，**並非**從 GitHub Releases 的 tarball——`@<tag>` 選的是 [Release](https://github.com/arcobaleno64/gemini-plugin-cc/releases) 背後的 git 標籤。釘版安裝**不會**自動更新；欲升至新版，請以新標籤重新加入 marketplace（例如 `…@v0.8.1`）。
 
-接著執行 `/gemini:setup`——若 Gemini CLI 尚未安裝且 npm 可用，指令會提供自動安裝選項。
+接著對 `auto`／Gemini 執行 `/gemini:setup`，或對 AGY 執行 `/gemini:setup --engine agy`。只需安裝所選引擎的 dependency；若缺少，setup 會提供對應安裝選項。
 
 若 Gemini 已安裝但尚未完成認證，請執行：
 
@@ -229,7 +229,7 @@
 在 `auto` 模式下，外掛依以下優先順序選擇可用引擎：
 
 1. **`gemini` CLI** — 透過 stdout 輸出；支援 stdin 提示傳遞。
-2. **`agy`** — 備援引擎；AGY 1.1.2 以上以 stdin 接收 prompt 且不帶 `--print`，舊版或版本不明時保留 `agy --print <prompt>`。
+2. **`agy`** — 第一級支援引擎及 `auto` 的第二候選；AGY 1.1.2 以上以 stdin 接收 prompt 且不帶 `--print`，舊版或版本不明時保留 `agy --print <prompt>`。
 
 可透過 `--engine` 旗標或 `GEMINI_ENGINE` 環境變數覆蓋。
 
@@ -243,6 +243,7 @@
 
 - **Stdin 傳遞**：Gemini prompt 與 AGY 1.1.2 以上 prompt 透過 Node.js `spawnSync` 的 `input` 傳遞，不進入 argv。AGY 1.1.2 以下或版本無法解析時保留 positional 相容路徑與 24,000 字元上限；處理不可信內容時請使用 Gemini 或 AGY 1.1.2 以上。
 - **Windows process 邊界**：Gemini 的 npm `.cmd` shim 以 `shell:true` 啟動，但 prompt 留在 stdin，argv 只有已驗證旗標。AGY 必須解析成絕對 `.exe`，並固定以 `shell:false` 啟動。
+- **Git process 邊界**：repository-derived ref 一律以 literal argv 與 `shell:false` 傳給 Git（Windows 亦同）；Git helper 不繼承 `.cmd` wrapper fallback。
 - **DEP0190 警告屬無害**：於 Windows 上可能見到 `(node:NNN) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.`。此處**可安心忽略**——該 deprecation 針對的是在 `shell: true` 下把*提示內容*放入 argv，但本外掛的 gemini 引擎從不如此：提示走 stdin，僅受控旗標進入 argv（且各自驗證，如 model id 須符合 `^[A-Za-z0-9][A-Za-z0-9._-]*$`）。此警告是 Node 對該通用模式的提醒，並非本程式路徑中的實際注入點。
 - **AGY transport 回退**：只有可穩定解析為 1.1.2 以上的版本才啟用 stdin；未知版與 prerelease 字串一律 fail closed 至既有 positional 路徑，不假設上游能力。
 - **憑證處理**：`~/.gemini/oauth_creds.json` 之 OAuth 憑證僅用於 `getGeminiLoginStatus()` 檢查 token 是否過期；本外掛從不記錄、複製或傳輸之。
@@ -258,11 +259,11 @@
 | `npm: not found` | PATH 中缺 Node/npm | 自 [nodejs.org](https://nodejs.org) 安裝 Node.js ≥ 18 |
 | setup 顯示 `gemini auth: No credentials …` | 未完成 OAuth | 執行一次 `!gemini` 並完成瀏覽器登入 |
 | setup 顯示 `… token expired` | OAuth token 已過期 | 再次執行 `!gemini` 以更新憑證 |
-| `Status: partial (AGY fallback only …)` | Gemini CLI 不可用但 AGY 存在 | 安裝 Gemini CLI，或使用 `--engine agy`（其認證無法驗證） |
+| `Status: partial (AGY available …)` | Gemini CLI 不可用但 AGY 存在 | 直接使用 `--engine agy`；setup 因無法非互動驗證 AGY 的獨立 OAuth flow，會維持 auth `unknown` |
 | Windows：命令可解析但執行失敗 | `.cmd` wrapper／PATH | 確認 `where gemini` 可解析；外掛以 `shell: true` 啟動裸命令名以尋得 `.cmd` shim |
 | `--engine agy` 回報找不到 brain 根目錄 | AGY 尚未建立 brain 目錄，或其位於未知位置 | 先執行一次 `agy` 讓其建立 brain 目錄。已知路徑：`~/.gemini/antigravity-cli/brain`（已於 Windows、macOS AGY 1.0.7 與 Linux AGY 1.1.2 驗證）與 `~/.antigravity-cli/brain`（較舊的 Linux 1.0.2，回報）；若不同請開 issue 回報其位置 |
 
-如需認證，執行一次 **`!gemini`**——外掛即以呼叫 `gemini` 自身完成 OAuth。**並無** `gemini login` 子命令。唯有 Node **且** Gemini CLI 皆存在**且** OAuth 有效時，`setup` 方回報 `ready: true`；已安裝但未認證之 Gemini 將回報為 *not ready*。
+Gemini 引擎請執行一次 **`!gemini`**——外掛即以呼叫 `gemini` 自身完成 OAuth，**並無** `gemini login` 子命令。AGY 引擎請互動式執行一次 `agy`；其獨立 OAuth 狀態不由 Gemini 的 `~/.gemini/oauth_creds.json` 推定。AGY binary 存在但 auth 無法驗證時，setup 會回報 `partial`。
 
 ---
 
@@ -286,13 +287,13 @@ Claude Code
 
 ## 與 codex-plugin-cc 的對應
 
-本外掛為 [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) 的高保真移植版。公開的斜線命令介面、背景工作模型，以及 state/result/status/cancel 流程皆鏡像上游；執行後端則改用 Gemini CLI（並以 AGY 為備援），而非 Codex app server。
+本外掛為 [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) 的高保真移植版。公開的斜線命令介面、背景工作模型，以及 state/result/status/cancel 流程皆鏡像上游；執行後端則為第一級支援的 Gemini CLI 與 AGY 引擎，而非 Codex app server。
 
 ### 相容性對照表
 
 | 上游（Codex） | 本外掛（Gemini） | 對應程度 |
 |---|---|---|
-| `/codex:setup` | `/gemini:setup` | **Gemini 專屬差異** — 檢查 `gemini` OAuth 與選用之 AGY 備援，而非 Codex 認證 |
+| `/codex:setup` | `/gemini:setup` | **Gemini 專屬差異** — 依所選第一級引擎檢查 Gemini OAuth 或 AGY binary readiness，而非 Codex 認證 |
 | `/codex:review` | `/gemini:review` | **最佳等效** — prompt／CLI adapter 審查，非原生審查器 |
 | `/codex:adversarial-review` | `/gemini:adversarial-review` | **最佳等效** — 對同一 diff target 施以對抗性 prompt |
 | `/codex:rescue` | `/gemini:rescue` | **1:1 對等** — 相同的 forwarder／subagent 合約與旗標 |
@@ -302,7 +303,7 @@ Claude Code
 
 ### Codex app server 與 Gemini CLI adapter
 
-- **執行時**：Codex 使用常駐 app-server，具原生審查與持久 thread。本外掛則於*每次命令*直接呼叫 Gemini CLI（無共享執行時）；AGY 為選用備援。
+- **執行時**：Codex 使用常駐 app-server，具原生審查與持久 thread。本外掛則於*每次命令*直接呼叫所選的第一級 Gemini CLI 或 AGY 引擎（無共享執行時）；`auto` 採 Gemini→AGY 的 capability-based 順序。
 - **標準審查**：Codex 外掛之 `/codex:review` 為*原生*審查器；本外掛之 `/gemini:review` 為 **prompt／CLI adapter 等效實作**——將 diff 連同務實審查 prompt 送交 Gemini 並解析回傳之結構化 JSON，並非原生 Gemini 審查器。
 - **沙箱**：Codex 提供 `read-only`／`workspace-write` 沙箱。Gemini 無對應沙箱；寫入權由 `--write`（`--yolo`）把關，否則以 prompt 強制唯讀紀律。（不採 `--approval-mode plan`：其需 TTY，與 stdin 提示傳遞衝突。）
 - **Thread／session 接續**：Codex 於 app-server 持久化 thread。本外掛之接續依賴自 JSON 信封擷取之 Gemini CLI **session id**；`/gemini:result` 會印出 `gemini --resume <session-id>`，而 `--resume-last` 接續*當前 Claude session* 之最新 thread。
@@ -344,4 +345,4 @@ MIT © 2026 arcobaleno64。
 
 **衍生自上游**（沿用，Apache-2.0）：斜線命令結構、背景工作模型（enqueue／worker／status／result／cancel）、`.omc/state` 持久化與 job-control 模式、停止時 review-gate 模式、skill 合約佈局，以及 version／manifest 工具（`bump-version`）。
 
-**本倉儲原創**（MIT）：Gemini/AGY 引擎偵測與路由、stdin 提示傳遞、`model-map` 別名／努力來源、AGY 備援處理、OAuth 狀態檢查，以及 contract 驗證腳本。
+**本倉儲原創**（MIT）：Gemini/AGY 引擎偵測與路由、stdin 提示傳遞、`model-map` 別名／努力來源、AGY 引擎處理、OAuth 狀態檢查，以及 contract 驗證腳本。

@@ -93,9 +93,10 @@ export function detectEngine(requestedEngine = null, options = {}) {
     return { engine: "gemini", binary: "gemini", version: status.detail ?? "unknown" };
   }
 
-  // auto: prefer gemini because it has the plugin's JSON/model contract. AGY
-  // remains a fallback even though 1.1.2 adds stdin prompt delivery; its response
-  // and conversation id still depend on transcript recovery in this adapter.
+  // auto: choose gemini first because it has the plugin's JSON/model contract,
+  // then choose the equally supported AGY engine. This is capability-based
+  // routing order, not a lower support tier; AGY responses and conversation ids
+  // still depend on transcript recovery in this adapter.
   const geminiStatus = binaryAvailable("gemini", ["--version"]);
   if (geminiStatus.available) {
     return { engine: "gemini", binary: "gemini", version: geminiStatus.detail ?? "unknown" };
@@ -107,7 +108,7 @@ export function detectEngine(requestedEngine = null, options = {}) {
     return { engine: "agy", binary: agyBinary, version: agyStatus.detail ?? "unknown" };
   }
 
-  throw new Error("No Gemini or AGY engine found. Install agy or gemini CLI and retry.");
+  throw new Error("No Gemini or AGY engine found. Install either supported engine and retry.");
 }
 
 function formatAgyTimeout(timeoutMs) {
