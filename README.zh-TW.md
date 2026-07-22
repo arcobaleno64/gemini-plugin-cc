@@ -147,8 +147,8 @@
 | `--resume-last` | 繼續最近一次的 Gemini 工作階段 |
 | `--fresh` | 強制開啟全新 Gemini 工作階段，忽略可接續的執行緒 |
 | `--engine <gemini\|agy\|auto>` | 覆蓋引擎選擇 |
-| `--model <別名\|ID>` | 指定模型（`flash`、`pro`、`lite`） |
-| `--effort <low\|medium\|high\|xhigh>` | 以努力等級對應模型選擇 |
+| `--model <別名\|ID>` | 指定模型。Gemini 解析其別名；AGY 1.1.5+ 要求使用 `agy models` 列出的精確 model ID。AGY 的模型選擇不可與 `--effort` 或雙引擎（`--engines gemini,agy`）審查合併。 |
+| `--effort <low\|medium\|high\|xhigh>` | Gemini 將 effort 映射為模型；AGY 1.1.5+ 在未指定 AGY model 時，原生傳遞 `low`、`medium` 或 `high` 推理強度。 |
 
 ### `/gemini:review`
 
@@ -162,6 +162,7 @@
 | `--scope <auto\|working-tree\|branch>` | Diff 範圍 |
 | `--engine <gemini\|agy\|auto>` | 覆蓋引擎 |
 | `--model <別名\|ID>` | 指定模型 |
+| `--effort <level>` | Gemini 的模型選擇；未指定 AGY model 時的 AGY 1.1.5+ 原生推理強度（`low`、`medium`、`high`） |
 
 ### `/gemini:adversarial-review [焦點]`
 
@@ -174,6 +175,7 @@
 | `--scope <auto\|working-tree\|branch>` | Diff 範圍 |
 | `--engine <gemini\|agy\|auto>` | 覆蓋引擎 |
 | `--model <別名\|ID>` | 指定模型 |
+| `--effort <level>` | Gemini 的模型選擇；未指定 AGY model 時的 AGY 1.1.5+ 原生推理強度（`low`、`medium`、`high`） |
 
 ### `/gemini:setup`
 
@@ -247,7 +249,7 @@
 
 可透過 `--engine` 旗標或 `GEMINI_ENGINE` 環境變數覆蓋。
 
-> `--model` 與 `--effort` 只由 **gemini** 引擎管理。`--engine agy` 目前讓 AGY 使用其 configured/default model；本外掛不會把 Gemini aliases 或 effort tiers 翻譯成 AGY 參數。
+> **AGY 1.1.5+ 選擇機制：** 使用 `agy models` 所列的 `--model <精確 ID>`，或使用 `--effort <low|medium|high>` 二者之一。Gemini alias 不是有效的 AGY model ID，model 與 effort 不可合併；雙引擎審查不可使用 `--model`，因為 model ID 具引擎特性。Gemini 仍維持其獨立的 alias 與 effort-to-model 映射。
 
 > **AGY transcript recovery 仍是權威來源。** 舊版 positional `agy --print` 沒有 piped response（上游 [google-gemini/gemini-cli#27466](https://github.com/google-gemini/gemini-cli/issues/27466)，已於 macOS AGY 1.0.7 重現）。外掛 v0.7.1 對 AGY 1.1.2 以上改走自動 print 的 stdin 路徑，但完成回應、DONE 狀態、thinking 與 conversation ID 仍取自磁碟 transcript。已知 brain root 為 `~/.gemini/antigravity-cli/brain`（已於 Windows、macOS AGY 1.0.7 與 Linux AGY 1.1.2 驗證）及 `~/.antigravity-cli/brain`（較舊的 Linux 1.0.2，回報）。1.1.2 stdin 路徑已於 Windows 與 Ubuntu 24.04 WSL2 live 驗證，並有 POSIX integration fixture；真實 macOS 1.1.2 驗證刻意列為 optional，尚未執行。若找不到 brain root，請先執行一次 `agy` 或開 issue 回報實際位置。
 
@@ -257,7 +259,7 @@
 
 - **Stdin 傳遞**：Gemini prompt 與 AGY 1.1.2 以上 prompt 透過 Node.js `spawnSync` 的 `input` 傳遞，不進入 argv。AGY 1.1.2 以下或版本無法解析時保留 positional 相容路徑與 24,000 字元上限；處理不可信內容時請使用 Gemini 或 AGY 1.1.2 以上。
 - **Windows process 邊界**：Gemini 的 npm `.cmd` shim 以 `shell:true` 啟動，但 prompt 留在 stdin，argv 只有已驗證旗標。AGY 必須解析成絕對 `.exe`，並固定以 `shell:false` 啟動。
-- **Git process 邊界**：repository-derived ref 一律以 literal argv 與 `shell:false` 傳給 Git（Windows 亦同）；Git helper 不繼承 `.cmd` wrapper fallback。
+- **Git process 邊界**：repository-derived ref 一律以 literal argv 與 `shell:false` 傳給 Git（Windows 亦同）；Git helper 不繼承 `.cmd` wrapper fallback。此處與上游 Codex 外掛 [v1.0.6 移除 Git shell expansion](https://github.com/openai/codex-plugin-cc/releases/tag/v1.0.6) 的 hardening 方向一致。
 - **DEP0190 警告屬無害**：於 Windows 上可能見到 `(node:NNN) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.`。此處**可安心忽略**——該 deprecation 針對的是在 `shell: true` 下把*提示內容*放入 argv，但本外掛的 gemini 引擎從不如此：提示走 stdin，僅受控旗標進入 argv（且各自驗證，如 model id 須符合 `^[A-Za-z0-9][A-Za-z0-9._-]*$`）。此警告是 Node 對該通用模式的提醒，並非本程式路徑中的實際注入點。
 - **AGY transport 回退**：只有可穩定解析為 1.1.2 以上的版本才啟用 stdin；未知版與 prerelease 字串一律 fail closed 至既有 positional 路徑，不假設上游能力。
 - **憑證處理**：`~/.gemini/oauth_creds.json` 之 OAuth 憑證僅用於 `getGeminiLoginStatus()` 檢查 token 是否過期；本外掛從不記錄、複製或傳輸之。
