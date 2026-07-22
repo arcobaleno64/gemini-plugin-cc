@@ -95,10 +95,10 @@
 
 ### 釘選發布版（指定某個已發布版本）
 
-將 marketplace 釘到某個 release 標籤——例如 `v0.9.0`：
+將 marketplace 釘到某個 release 標籤——例如 `v0.9.1`：
 
 ```
-/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.9.0
+/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.9.1
 /plugin install gemini@gemini-plugin-cc
 /reload-plugins
 ```

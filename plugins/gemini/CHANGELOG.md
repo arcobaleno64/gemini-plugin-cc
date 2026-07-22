@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.9.1 — 2026-07-22 — CI test isolation
+
+### Fixed
+- **The MCP rescue parity test no longer depends on a locally installed Gemini CLI.** It now injects the runtime's existing engine-detection seam for both dispatch paths, so CI verifies byte-identical job prompts independently of developer-machine binaries.
+
 ## 0.9.0 — 2026-07-22 — AGY model and effort selection
 
 ### Changed
