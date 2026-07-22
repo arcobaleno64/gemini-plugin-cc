@@ -97,10 +97,10 @@ For an explicit update without enabling auto-update, run:
 
 ### Pinned release (a specific published version)
 
-Pin the marketplace to a release tag — e.g. `v0.8.0`:
+Pin the marketplace to a release tag — e.g. `v0.9.0`:
 
 ```
-/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.8.0
+/plugin marketplace add arcobaleno64/gemini-plugin-cc@v0.9.0
 /plugin install gemini@gemini-plugin-cc
 /reload-plugins
 ```
@@ -238,7 +238,7 @@ When enabled and the review returns `needs-attention`, Claude Code is blocked fr
 - **CLI probe snapshot.** The alias table reflects the model-map probe from 2026-06-02 against gemini CLI 0.44.1. Newer Gemini CLI releases may serve different model IDs. If an alias stops resolving, override it with `--model <exact-id>` — any value that is not a known alias is passed through to the CLI unchanged.
 - **Gemini 3.5 availability can drift.** The 2026-06-02 gemini CLI 0.44.1 probe returned `404 ModelNotFound` for `gemini-3.5-flash` and `gemini-3.5-pro`; newer CLI releases may differ. Unknown or unavailable model IDs degrade gracefully to the GA fallback.
 - **Graceful model fallback.** If a requested model id is not found on your gemini CLI (preview/retired id, or a CLI-version mismatch), the plugin retries the run **once on the GA fallback `gemini-2.5-flash`** and prints a clear note — so a stale id degrades gracefully instead of hard-failing.
-- **AGY model selection is not managed by this plugin yet.** Some AGY versions expose their own `--model` surface, but `--engine agy` currently runs through AGY's configured/default model and the plugin does not translate `--model` or `--effort` to AGY arguments. Use `--engine gemini` for plugin-managed model selection.
+- **AGY 1.1.5+ model and reasoning selection.** Use either `--model <exact-id>` from `agy models` or native `--effort <low|medium|high>`; the options are mutually exclusive. AGY model IDs are not Gemini aliases, and `--model` is unavailable for a dual-engine review because model IDs are engine-specific.
 
 ---
 
